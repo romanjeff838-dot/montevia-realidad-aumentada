@@ -1,173 +1,121 @@
-
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <title>Montevía | Bosque encantado</title>
-
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
 <style>
-body{margin:0;background:#000;font-family:Georgia,serif}
-#title{
-position:fixed;top:22px;width:100%;text-align:center;
-color:#f5d99a;z-index:5;font-size:19px;
-letter-spacing:2px;text-shadow:0 2px 12px #000;
-pointer-events:none
-}
-#hint{
-position:fixed;bottom:28px;width:100%;text-align:center;
-color:#fff0ce;z-index:5;font-size:13px;
-text-shadow:0 2px 8px #000;pointer-events:none
-}
+html,body{margin:0;height:100%;background:#000;overflow:hidden;font-family:Georgia,serif}
+.a-enter-vr,.a-enter-ar,.a-orientation-modal{display:none!important}
+.ui{position:fixed;left:0;width:100%;text-align:center;z-index:5;pointer-events:none;transition:opacity 1.2s;text-shadow:0 2px 12px #000}
+#title{top:calc(22px + env(safe-area-inset-top));color:#f5d99a;font-size:19px;letter-spacing:2px}
+#hint{bottom:calc(30px + env(safe-area-inset-bottom));color:#fff0ce;font-size:14px}
+body.found #title,body.found #hint{opacity:0}
+#glow,#dust{position:fixed;left:0;top:0;width:100%;height:100%;z-index:4;pointer-events:none;opacity:0;transition:opacity 2.5s}
+#glow{background:radial-gradient(ellipse at center,rgba(255,190,90,0) 50%,rgba(255,170,60,.32) 100%)}
+body.found #glow,body.found #dust{opacity:1}
 </style>
-
 <script>
-AFRAME.registerComponent('butterfly',{
-schema:{color:{default:'#e9b957'},scale:{default:1}},
-init:function(){
-const THREE=AFRAME.THREE;
-const root=this.el.object3D;
-const mat=new THREE.MeshStandardMaterial({
-color:this.data.color,side:THREE.DoubleSide,
-roughness:.45,emissive:this.data.color,
-emissiveIntensity:.12
-});
-const wingShape=new THREE.Shape();
-wingShape.moveTo(0,0);
-wingShape.bezierCurveTo(-.12,.22,-.34,.25,-.30,.04);
-wingShape.bezierCurveTo(-.27,-.08,-.10,-.10,0,0);
-const geo=new THREE.ShapeGeometry(wingShape,16);
-const left=new THREE.Mesh(geo,mat);
-const right=new THREE.Mesh(geo,mat);
-left.position.x=-.025;
-right.position.x=.025;
-left.rotation.y=Math.PI;
-left.scale.setScalar(this.data.scale);
-right.scale.setScalar(this.data.scale);
-root.add(left,right);
-this.wings=[left,right];
-const body=new THREE.Mesh(
-new THREE.CylinderGeometry(.009,.012,.12,8),
-new THREE.MeshStandardMaterial({color:'#39251b'})
-);
-body.rotation.x=Math.PI/2;
-root.add(body);
-this.left=left;this.right=right;
-},
-tick:function(t){
-const flap=Math.sin(t*.018)*.75;
-this.left.rotation.y=Math.PI+flap;
-this.right.rotation.y=-flap;
-}
-});
+(function(){
+const THREE=AFRAME.THREE,rnd=(a,b)=>a+Math.random()*(b-a),clamp=THREE.MathUtils.clamp;
+function tex(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);if(THREE.SRGBColorSpace)t.colorSpace=THREE.SRGBColorSpace;return t}
+const glowTex=tex(64,64,(x,w,h)=>{const g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.3,'rgba(255,235,180,.55)');g.addColorStop(1,'rgba(255,210,120,0)');x.fillStyle=g;x.fillRect(0,0,w,h)});
+const rayTex=tex(64,256,(x,w,h)=>{let g=x.createLinearGradient(0,0,w,0);g.addColorStop(0,'rgba(255,225,150,0)');g.addColorStop(.5,'rgba(255,235,170,1)');g.addColorStop(1,'rgba(255,225,150,0)');x.fillStyle=g;x.fillRect(0,0,w,h);x.globalCompositeOperation='destination-in';g=x.createLinearGradient(0,0,0,h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(.25,'rgba(0,0,0,1)');g.addColorStop(.75,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,w,h)});
+const leafTex=tex(64,96,(x,w,h)=>{const g=x.createLinearGradient(0,0,w,0);g.addColorStop(0,'#e9c79a');g.addColorStop(.5,'#fff');g.addColorStop(1,'#e9c79a');x.fillStyle=g;x.fillRect(0,0,w,h);x.strokeStyle='rgba(90,40,10,.55)';x.lineWidth=2;x.beginPath();x.moveTo(w/2,h);x.lineTo(w/2,0);for(let i=1;i<6;i++){x.moveTo(w/2,h-i*h/7);x.lineTo(w*.12,h-i*h/7-14);x.moveTo(w/2,h-i*h/7);x.lineTo(w*.88,h-i*h/7-14)}x.stroke()});
+const wc={};
+function wingTex(p){return wc[p.k]||(wc[p.k]=tex(128,128,(x,w,h)=>{
+ let g=x.createRadialGradient(0,h*.5,0,0,h*.5,w*1.1);g.addColorStop(0,p.b);g.addColorStop(.5,p.a);g.addColorStop(1,p.b);x.fillStyle=g;x.fillRect(0,0,w,h);
+ x.strokeStyle='rgba(50,25,8,.5)';x.lineWidth=1.5;
+ for(let i=0;i<8;i++){const y=h*(.08+.12*i);x.beginPath();x.moveTo(0,h*.5);x.quadraticCurveTo(w*.4,(h*.5+y)/2,w*.96,y);x.stroke()}
+ g=x.createRadialGradient(0,h*.5,w*.62,0,h*.5,w*1.08);g.addColorStop(0,'rgba(30,14,4,0)');g.addColorStop(1,'rgba(30,14,4,.9)');x.fillStyle=g;x.fillRect(0,0,w,h);
+ x.fillStyle=p.s;for(let i=-3;i<=3;i++){const a=i*.2,r=w*.8;x.beginPath();x.arc(Math.cos(a)*r,h*.5+Math.sin(a)*r,3,0,6.3);x.fill()}
+}))}
+const PAL=[{k:1,a:'#ffd25a',b:'#d9731c',s:'#fff3c4',g:'#ffcf6a'},{k:2,a:'#fff1c9',b:'#e0a85a',s:'#ffffff',g:'#ffe9b0'},{k:3,a:'#ffb347',b:'#b8481a',s:'#ffe8b0',g:'#ffa84a'},{k:4,a:'#9be0ff',b:'#2f7fd6',s:'#e9fbff',g:'#8fd8ff'}];
+function shapeGeo(s,bx,by,bw,bh){const g=new THREE.ShapeGeometry(s,18),p=g.attributes.position,u=g.attributes.uv;for(let i=0;i<p.count;i++)u.setXY(i,(p.getX(i)-bx)/bw,(p.getY(i)-by)/bh);return g}
+function wingGeo(){const s=new THREE.Shape();s.moveTo(0,.02);s.bezierCurveTo(.06,.2,.26,.36,.42,.28);s.bezierCurveTo(.47,.18,.4,.06,.26,0);s.bezierCurveTo(.36,-.04,.38,-.22,.24,-.3);s.bezierCurveTo(.12,-.34,.03,-.2,0,-.02);return shapeGeo(s,0,-.34,.47,.7)}
+function leafGeo(){const s=new THREE.Shape();s.moveTo(0,-.12);s.bezierCurveTo(.14,-.02,.12,.14,0,.26);s.bezierCurveTo(-.12,.14,-.14,-.02,0,-.12);return shapeGeo(s,-.14,-.12,.28,.38)}
 
-AFRAME.registerComponent('leaf',{
-schema:{color:{default:'#bd7929'}},
-init:function(){
-const THREE=AFRAME.THREE;
-const s=new THREE.Shape();
-s.moveTo(0,0);
-s.quadraticCurveTo(-.12,.13,0,.28);
-s.quadraticCurveTo(.12,.13,0,0);
-const mesh=new THREE.Mesh(
-new THREE.ShapeGeometry(s,12),
-new THREE.MeshStandardMaterial({
-color:this.data.color,side:THREE.DoubleSide,
-roughness:.8
-})
-);
-this.el.object3D.add(mesh);
-}
-});
+AFRAME.registerComponent('magic-forest',{
+schema:{aspect:{default:1.5}},
+init(){
+ const A=this.data.aspect,root=this.root=new THREE.Group();this.el.object3D.add(root);
+ this.t=0;this.t0=0;this.F=0;this.on=false;this.lostAt=-99;this.fx=[];
+ const add=(m,b)=>{m.userData.base=b;m.transparent=true;m.depthWrite=false;this.fx.push(m);return m};
+ const wg=wingGeo();
+ // Mariposas
+ this.bf=[0,1,2,3,1,0].map((pi,i)=>{
+  const p=PAL[pi],s=rnd(.15,.25),g=new THREE.Group(),lean=new THREE.Group(),mir=new THREE.Group(),pv=[new THREE.Group(),new THREE.Group()];
+  const m=add(new THREE.MeshBasicMaterial({map:wingTex(p),side:THREE.DoubleSide,toneMapped:false}),1);
+  pv.forEach(q=>q.add(new THREE.Mesh(wg,m)));mir.scale.x=-1;mir.add(pv[1]);
+  const body=new THREE.Mesh(new THREE.SphereGeometry(1,8,6),add(new THREE.MeshBasicMaterial({color:'#2a170b'}),1));body.scale.set(.02,.16,.02);
+  lean.add(pv[0],mir,body);lean.scale.setScalar(s);
+  const sp=new THREE.Sprite(add(new THREE.SpriteMaterial({map:glowTex,color:p.g,blending:THREE.AdditiveBlending}),.45));sp.scale.setScalar(s*2.4);
+  g.add(lean,sp);root.add(g);
+  return{g,lean,pv,d:i*.5,cx:rnd(-.3,.3),cy:rnd(-A*.3,A*.3),rx:rnd(.25,.45),ry:rnd(.2,.4),sp:rnd(.35,.6),ph:rnd(0,6.28),z0:rnd(.15,.45),za:rnd(.05,.15)}});
+ // Hojas
+ const lg=leafGeo();
+ this.lv=[...Array(14)].map((_,i)=>{const m=add(new THREE.MeshBasicMaterial({map:leafTex,color:['#ffb347','#d9822b','#c0562b','#f2cf63','#e08a2e'][i%5],side:THREE.DoubleSide,toneMapped:false}),1);const me=new THREE.Mesh(lg,m);me.scale.setScalar(rnd(.28,.5));root.add(me);return{me,m,x:rnd(-.7,.7),z:rnd(.05,.7),v:rnd(.07,.13),o:rnd(0,A+.4),ph:rnd(0,6.28),rx:rnd(.8,2),ry:rnd(.8,2)}});
+ // Luciérnagas
+ const N=90,geo=new THREE.BufferGeometry();
+ geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));geo.setAttribute('color',new THREE.BufferAttribute(new Float32Array(N*3),3));
+ this.ff=[...Array(N)].map(()=>({x:rnd(-.75,.75),y:rnd(0,A+.3),z:rnd(.03,.9),r:rnd(.02,.07),ph:rnd(0,6.28),tw:rnd(1.5,4)}));
+ this.pts=new THREE.Points(geo,add(new THREE.PointsMaterial({map:glowTex,size:.06,vertexColors:true,blending:THREE.AdditiveBlending}),1));this.pts.frustumCulled=false;root.add(this.pts);
+ // Rayos de luz
+ this.rays=[-.35,-.1,.15,.4].map((x,i)=>{const m=add(new THREE.MeshBasicMaterial({map:rayTex,color:'#ffe2a0',blending:THREE.AdditiveBlending,side:THREE.DoubleSide}),.2);const me=new THREE.Mesh(new THREE.PlaneGeometry(rnd(.18,.32),A*1.3),m);me.position.set(x,0,.06+i*.04);me.rotation.z=-.4;root.add(me);return{me,m,x,ph:rnd(0,6.28)}});
+ // Onda de luz al despertar
+ this.ring=new THREE.Mesh(new THREE.RingGeometry(.47,.5,64),new THREE.MeshBasicMaterial({color:'#ffd98a',blending:THREE.AdditiveBlending,transparent:true,depthWrite:false,opacity:0}));this.ring.position.z=.03;root.add(this.ring);
+ this.el.addEventListener('targetFound',()=>{this.on=true;if(performance.now()/1000-this.lostAt>3){this.t0=this.t;this.F=0}});
+ this.el.addEventListener('targetLost',()=>{this.on=false;this.lostAt=performance.now()/1000});
+},
+tick(_,dt){
+ if(!this.on)return;dt=Math.min(dt,50)/1000;const t=this.t+=dt,A=this.data.aspect,s=t-this.t0,F=this.F=Math.min(1,this.F+dt*.8);
+ this.fx.forEach(m=>m.opacity=m.userData.base*F);
+ const r=clamp(s/1.8,0,1);this.ring.scale.setScalar(.2+r*2.2);this.ring.material.opacity=s<1.8?(1-r)*.7:0;
+ this.bf.forEach(b=>{
+  const e=clamp((s-b.d)/3.2,0,1),k=1-Math.pow(1-e,3),u=t*b.sp+b.ph;
+  const P=u=>[b.cx+b.rx*Math.sin(u)+.05*Math.sin(u*2.3),b.cy+b.ry*Math.sin(u*.7+1)+.04*Math.sin(u*3.1),b.z0+b.za*Math.sin(u*.9+2)];
+  const p=P(u),q=P(u+.05);
+  b.g.position.set(p[0]*k,p[1]*k,.03+(p[2]-.03)*k);b.g.scale.setScalar(Math.max(k,.001));
+  b.lean.rotation.z+=(-clamp((q[0]-p[0])*30,-.6,.6)-b.lean.rotation.z)*.1;b.lean.rotation.x=.25+Math.sin(t*1.3+b.ph)*.1;
+  const a=.1+.95*(.5+.5*Math.sin(t*(11+b.ph)));b.pv[0].rotation.y=a;b.pv[1].rotation.y=a});
+ const H=A+.4;
+ this.lv.forEach(l=>{const f=((l.o+t*l.v)%H)/H;l.me.position.set(l.x+.08*Math.sin(t*.8+l.ph)+.05*Math.sin(t*1.9+l.ph),A/2+.2-f*H,l.z);l.me.rotation.set(t*l.rx+l.ph,t*l.ry,Math.sin(t*.9+l.ph)*.9);l.m.opacity=F*Math.min(1,f*8,(1-f)*8)});
+ const pa=this.pts.geometry.attributes,HH=A+.3;
+ this.ff.forEach((f,i)=>{const fr=((f.y+t*f.r*1.5)%HH)/HH;pa.position.setXYZ(i,f.x+.08*Math.sin(t*.5+f.ph),-A/2-.1+fr*HH,f.z+.05*Math.sin(t*.4+f.ph));const v=(.5+.5*Math.sin(t*f.tw+f.ph))*Math.min(1,fr*6,(1-fr)*6);pa.color.setXYZ(i,v,.82*v,.45*v)});
+ pa.position.needsUpdate=pa.color.needsUpdate=true;
+ this.rays.forEach(y=>{y.m.userData.base=.18+.14*Math.sin(t*.6+y.ph);y.me.position.x=y.x+.05*Math.sin(t*.3+y.ph)});
+}});
+})();
 </script>
 </head>
-
 <body>
-<div id="title">MONTEVÍA · EL BOSQUE ENCANTADO</div>
-<div id="hint">Apunta al cuadro y descubre la magia</div>
+<div id="title" class="ui">MONTEVÍA · EL BOSQUE ENCANTADO</div>
+<div id="hint" class="ui">Despertando el bosque…</div>
+<div id="glow"></div>
+<canvas id="dust"></canvas>
 
-<a-scene
-mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: true; uiLoading: no; uiError: no; uiScanning: no"
-renderer="colorManagement: true; physicallyCorrectLights: true"
-vr-mode-ui="enabled: false"
-device-orientation-permission-ui="enabled: false">
-
+<!-- Para sumar otro cuadro: agrega su imagen al archivo targets.mind.txt y copia la línea de abajo con el siguiente targetIndex -->
+<a-scene mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: true; uiLoading: no; uiError: no; uiScanning: no; missTolerance: 15; warmupTolerance: 4" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
 <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
-
-<a-entity mindar-image-target="targetIndex:0">
-
-<a-entity light="type: ambient; intensity:1.5"></a-entity>
-<a-entity light="type: point; color:#ffd58a; intensity:1.8; distance:4"
-position="0 .3 .5"></a-entity>
-
-<!-- MARIPOSAS REALISTAS ESTILIZADAS -->
-<a-entity butterfly="color:#e8b44f; scale:1.5"
-position="-.35 .1 .15"
-animation="property:position; to:-.65 .55 .8; dur:5500; loop:true; dir:alternate"
-animation__turn="property:rotation; to:0 0 30; dur:3000; loop:true; dir:alternate">
-</a-entity>
-
-<a-entity butterfly="color:#f3dca1; scale:1.2"
-position=".25 .25 .2"
-animation="property:position; to:.65 .5 .9; dur:6500; loop:true; dir:alternate">
-</a-entity>
-
-<a-entity butterfly="color:#c58a43; scale:1.7"
-position=".05 -.2 .15"
-animation="property:position; to:.35 -.5 .85; dur:4800; loop:true; dir:alternate">
-</a-entity>
-
-<a-entity butterfly="color:#fff0c5; scale:1"
-position="-.2 -.25 .2"
-animation="property:position; to:-.7 -.1 .8; dur:6000; loop:true; dir:alternate">
-</a-entity>
-
-<!-- HOJAS DE OTOÑO -->
-<a-entity leaf="color:#b87525" position="-.25 .15 .1"
-animation="property:position; to:-.8 .55 .9; dur:5000; loop:true; dir:alternate"
-animation__spin="property:rotation; to:180 360 90; dur:4000; loop:true">
-</a-entity>
-
-<a-entity leaf="color:#d69b36" position=".3 .1 .15"
-animation="property:position; to:.75 .4 .8; dur:4300; loop:true; dir:alternate"
-animation__spin="property:rotation; to:360 180 180; dur:3500; loop:true">
-</a-entity>
-
-<a-entity leaf="color:#a64f20" position="-.1 -.2 .15"
-animation="property:position; to:-.55 -.5 .8; dur:6000; loop:true; dir:alternate"
-animation__spin="property:rotation; to:180 360 270; dur:4500; loop:true">
-</a-entity>
-
-<a-entity leaf="color:#e6bb61" position=".2 -.15 .1"
-animation="property:position; to:.7 -.4 .9; dur:5200; loop:true; dir:alternate"
-animation__spin="property:rotation; to:360 180 90; dur:3800; loop:true">
-</a-entity>
-
-<!-- DESTELLOS DORADOS -->
-<a-sphere position="-.3 .3 .3" radius=".018"
-material="color:#ffe5a0; emissive:#ffca55; emissiveIntensity:2"
-animation="property:position; to:-.6 .7 .8; dur:3000; loop:true; dir:alternate">
-</a-sphere>
-
-<a-sphere position=".3 .2 .2" radius=".012"
-material="color:#fff0c0; emissive:#ffe3a0; emissiveIntensity:3"
-animation="property:position; to:.6 .6 .9; dur:3500; loop:true; dir:alternate">
-</a-sphere>
-
-<a-sphere position="0 -.2 .2" radius=".015"
-material="color:#ffe5a0; emissive:#ffd15e; emissiveIntensity:2"
-animation="property:position; to:.2 -.6 .8; dur:4000; loop:true; dir:alternate">
-</a-sphere>
-
-<a-sphere position="-.15 -.1 .2" radius=".01"
-material="color:#fff5d5; emissive:#fff0bd; emissiveIntensity:3"
-animation="property:position; to:-.7 .2 .9; dur:3200; loop:true; dir:alternate">
-</a-sphere>
-
-</a-entity>
+<a-entity mindar-image-target="targetIndex:0" magic-forest="aspect:1.5"></a-entity>
 </a-scene>
+
+<script>
+// Polvo dorado que flota sobre la pantalla (envuelve a la persona)
+(()=>{const cv=document.getElementById('dust'),x=cv.getContext('2d'),dp=Math.min(devicePixelRatio||1,2);let W,H;const sz=()=>{W=cv.width=innerWidth*dp;H=cv.height=innerHeight*dp};sz();addEventListener('resize',sz);
+const sp=document.createElement('canvas');sp.width=sp.height=32;const sx=sp.getContext('2d'),g=sx.createRadialGradient(16,16,0,16,16,16);g.addColorStop(0,'rgba(255,240,190,1)');g.addColorStop(1,'rgba(255,200,100,0)');sx.fillStyle=g;sx.fillRect(0,0,32,32);
+const mk=i=>({x:Math.random()*W,y:i?Math.random()*H:H+20,r:(2+Math.random()*6)*dp,v:(10+Math.random()*30)*dp,w:Math.random()*6.3,s:1+Math.random()*2});
+const P=Array.from({length:50},()=>mk(1));let last=performance.now();
+(function L(n){requestAnimationFrame(L);const d=Math.min((n-last)/1000,.05);last=n;if(!document.body.classList.contains('found'))return;x.clearRect(0,0,W,H);x.globalCompositeOperation='lighter';P.forEach(p=>{p.y-=p.v*d;p.w+=d*p.s;p.x+=Math.sin(p.w)*12*dp*d;if(p.y<-20)Object.assign(p,mk(0));x.globalAlpha=.35+.35*Math.sin(p.w*2);x.drawImage(sp,p.x-p.r,p.y-p.r,p.r*2,p.r*2)})})(last)})();
+// Mostrar/ocultar textos y brillo al reconocer el cuadro
+let nf=0,to;document.querySelectorAll('[mindar-image-target]').forEach(e=>{
+ e.addEventListener('targetFound',()=>{nf++;clearTimeout(to);document.body.classList.add('found')});
+ e.addEventListener('targetLost',()=>{nf=Math.max(0,nf-1);if(!nf)to=setTimeout(()=>document.body.classList.remove('found'),1500)})});
+const sc=document.querySelector('a-scene'),h=document.getElementById('hint');
+sc.addEventListener('arReady',()=>h.textContent='Apunta al cuadro y descubre la magia');
+sc.addEventListener('arError',()=>h.textContent='No pude abrir la cámara. Permite el acceso y recarga la página.');
+</script>
 </body>
 </html>
