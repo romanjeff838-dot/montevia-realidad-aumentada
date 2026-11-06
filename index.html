@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Montevía – Bosque mágico</title>
+
+<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+<style>
+body {
+  margin: 0;
+  overflow: hidden;
+  font-family: Georgia, serif;
+}
+#mensaje {
+  position: fixed;
+  top: 20px;
+  left: 0;
+  width: 100%;
+  text-align: center;
+  color: #fff0c2;
+  font-size: 19px;
+  z-index: 10;
+  text-shadow: 0 2px 8px #000;
+  pointer-events: none;
+}
+</style>
+</head>
+
+<body>
+
+<div id="mensaje">Montevía · Apunta al cuadro para descubrir la magia</div>
+
+<a-scene
+  mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: true; uiLoading: no; uiError: no; uiScanning: no;"
+  color-space="sRGB"
+  renderer="colorManagement: true; physicallyCorrectLights: true"
+  vr-mode-ui="enabled: false"
+  device-orientation-permission-ui="enabled: false">
+
+  <a-assets>
+    <a-mixin id="hoja"
+      geometry="primitive: sphere"
+      material="color: #d99b28; roughness: 0.7"
+      scale="0.035 0.012 0.006">
+    </a-mixin>
+  </a-assets>
+
+  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+  <a-entity mindar-image-target="targetIndex: 0">
+
+    <!-- Luz mágica -->
+    <a-entity light="type: ambient; intensity: 1.4"></a-entity>
+
+    <!-- Hojas doradas que salen del cuadro -->
+    <a-entity mixin="hoja" position="-0.35 0.1 0.15"
+      animation="property: position; to: -0.65 0.45 0.8; dur: 3500; loop: true">
+    </a-entity>
+
+    <a-entity mixin="hoja" position="0.2 0.2 0.1"
+      animation="property: position; to: 0.5 0.6 0.9; dur: 4200; loop: true">
+    </a-entity>
+
+    <a-entity mixin="hoja" position="0.3 -0.1 0.2"
+      animation="property: position; to: 0.7 -0.4 0.8; dur: 3800; loop: true">
+    </a-entity>
+
+    <a-entity mixin="hoja" position="-0.2 -0.2 0.1"
+      animation="property: position; to: -0.6 -0.5 0.9; dur: 4600; loop: true">
+    </a-entity>
+
+    <!-- Mariposas doradas -->
+    <a-entity position="-0.15 0.1 0.3"
+      animation="property: position; to: -0.65 0.45 1; dur: 5000; loop: true; dir: alternate">
+      <a-sphere color="#ffd76b" scale="0.045 0.025 0.008"
+        position="-0.035 0.015 0"></a-sphere>
+      <a-sphere color="#ffe9a6" scale="0.045 0.025 0.008"
+        position="0.035 0.015 0"></a-sphere>
+      <a-cylinder color="#75451c" radius="0.005" height="0.06"
+        rotation="90 0 0"></a-cylinder>
+    </a-entity>
+
+    <a-entity position="0.2 0.25 0.2"
+      animation="property: position; to: 0.65 0.55 1; dur: 6000; loop: true; dir: alternate">
+      <a-sphere color="#ffd76b" scale="0.04 0.025 0.008"
+        position="-0.035 0.015 0"></a-sphere>
+      <a-sphere color="#fff0bd" scale="0.04 0.025 0.008"
+        position="0.035 0.015 0"></a-sphere>
+      <a-cylinder color="#75451c" radius="0.005" height="0.06"
+        rotation="90 0 0"></a-cylinder>
+    </a-entity>
+
+    <!-- Partículas luminosas -->
+    <a-sphere color="#ffe8a1" position="0 0 0.3" scale="0.025 0.025 0.025"
+      material="emissive: #ffd45c; emissiveIntensity: 2"
+      animation="property: position; to: 0.2 0.6 1; dur: 3000; loop: true">
+    </a-sphere>
+
+    <a-sphere color="#fff1c5" position="-0.3 -0.1 0.2" scale="0.018 0.018 0.018"
+      material="emissive: #ffe4a0; emissiveIntensity: 2"
+      animation="property: position; to: -0.7 0.4 0.8; dur: 4000; loop: true">
+    </a-sphere>
+
+    <a-sphere color="#ffce55" position="0.3 -0.3 0.2" scale="0.02 0.02 0.02"
+      material="emissive: #ffce55; emissiveIntensity: 2"
+      animation="property: position; to: 0.7 0.3 0.9; dur: 3500; loop: true">
+    </a-sphere>
+
+  </a-entity>
+</a-scene>
+
+</body>
+</html>
