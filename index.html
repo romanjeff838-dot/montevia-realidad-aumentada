@@ -1,116 +1,173 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Montevía – Bosque mágico</title>
+<title>Montevía | Bosque encantado</title>
 
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 
 <style>
-body {
-  margin: 0;
-  overflow: hidden;
-  font-family: Georgia, serif;
+body{margin:0;background:#000;font-family:Georgia,serif}
+#title{
+position:fixed;top:22px;width:100%;text-align:center;
+color:#f5d99a;z-index:5;font-size:19px;
+letter-spacing:2px;text-shadow:0 2px 12px #000;
+pointer-events:none
 }
-#mensaje {
-  position: fixed;
-  top: 20px;
-  left: 0;
-  width: 100%;
-  text-align: center;
-  color: #fff0c2;
-  font-size: 19px;
-  z-index: 10;
-  text-shadow: 0 2px 8px #000;
-  pointer-events: none;
+#hint{
+position:fixed;bottom:28px;width:100%;text-align:center;
+color:#fff0ce;z-index:5;font-size:13px;
+text-shadow:0 2px 8px #000;pointer-events:none
 }
 </style>
+
+<script>
+AFRAME.registerComponent('butterfly',{
+schema:{color:{default:'#e9b957'},scale:{default:1}},
+init:function(){
+const THREE=AFRAME.THREE;
+const root=this.el.object3D;
+const mat=new THREE.MeshStandardMaterial({
+color:this.data.color,side:THREE.DoubleSide,
+roughness:.45,emissive:this.data.color,
+emissiveIntensity:.12
+});
+const wingShape=new THREE.Shape();
+wingShape.moveTo(0,0);
+wingShape.bezierCurveTo(-.12,.22,-.34,.25,-.30,.04);
+wingShape.bezierCurveTo(-.27,-.08,-.10,-.10,0,0);
+const geo=new THREE.ShapeGeometry(wingShape,16);
+const left=new THREE.Mesh(geo,mat);
+const right=new THREE.Mesh(geo,mat);
+left.position.x=-.025;
+right.position.x=.025;
+left.rotation.y=Math.PI;
+left.scale.setScalar(this.data.scale);
+right.scale.setScalar(this.data.scale);
+root.add(left,right);
+this.wings=[left,right];
+const body=new THREE.Mesh(
+new THREE.CylinderGeometry(.009,.012,.12,8),
+new THREE.MeshStandardMaterial({color:'#39251b'})
+);
+body.rotation.x=Math.PI/2;
+root.add(body);
+this.left=left;this.right=right;
+},
+tick:function(t){
+const flap=Math.sin(t*.018)*.75;
+this.left.rotation.y=Math.PI+flap;
+this.right.rotation.y=-flap;
+}
+});
+
+AFRAME.registerComponent('leaf',{
+schema:{color:{default:'#bd7929'}},
+init:function(){
+const THREE=AFRAME.THREE;
+const s=new THREE.Shape();
+s.moveTo(0,0);
+s.quadraticCurveTo(-.12,.13,0,.28);
+s.quadraticCurveTo(.12,.13,0,0);
+const mesh=new THREE.Mesh(
+new THREE.ShapeGeometry(s,12),
+new THREE.MeshStandardMaterial({
+color:this.data.color,side:THREE.DoubleSide,
+roughness:.8
+})
+);
+this.el.object3D.add(mesh);
+}
+});
+</script>
 </head>
 
 <body>
-
-<div id="mensaje">Montevía · Apunta al cuadro para descubrir la magia</div>
+<div id="title">MONTEVÍA · EL BOSQUE ENCANTADO</div>
+<div id="hint">Apunta al cuadro y descubre la magia</div>
 
 <a-scene
-  mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: true; uiLoading: no; uiError: no; uiScanning: no;"
-  color-space="sRGB"
-  renderer="colorManagement: true; physicallyCorrectLights: true"
-  vr-mode-ui="enabled: false"
-  device-orientation-permission-ui="enabled: false">
+mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: true; uiLoading: no; uiError: no; uiScanning: no"
+renderer="colorManagement: true; physicallyCorrectLights: true"
+vr-mode-ui="enabled: false"
+device-orientation-permission-ui="enabled: false">
 
-  <a-assets>
-    <a-mixin id="hoja"
-      geometry="primitive: sphere"
-      material="color: #d99b28; roughness: 0.7"
-      scale="0.035 0.012 0.006">
-    </a-mixin>
-  </a-assets>
+<a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
 
-  <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+<a-entity mindar-image-target="targetIndex:0">
 
-  <a-entity mindar-image-target="targetIndex: 0">
+<a-entity light="type: ambient; intensity:1.5"></a-entity>
+<a-entity light="type: point; color:#ffd58a; intensity:1.8; distance:4"
+position="0 .3 .5"></a-entity>
 
-    <!-- Luz mágica -->
-    <a-entity light="type: ambient; intensity: 1.4"></a-entity>
+<!-- MARIPOSAS REALISTAS ESTILIZADAS -->
+<a-entity butterfly="color:#e8b44f; scale:1.5"
+position="-.35 .1 .15"
+animation="property:position; to:-.65 .55 .8; dur:5500; loop:true; dir:alternate"
+animation__turn="property:rotation; to:0 0 30; dur:3000; loop:true; dir:alternate">
+</a-entity>
 
-    <!-- Hojas doradas que salen del cuadro -->
-    <a-entity mixin="hoja" position="-0.35 0.1 0.15"
-      animation="property: position; to: -0.65 0.45 0.8; dur: 3500; loop: true">
-    </a-entity>
+<a-entity butterfly="color:#f3dca1; scale:1.2"
+position=".25 .25 .2"
+animation="property:position; to:.65 .5 .9; dur:6500; loop:true; dir:alternate">
+</a-entity>
 
-    <a-entity mixin="hoja" position="0.2 0.2 0.1"
-      animation="property: position; to: 0.5 0.6 0.9; dur: 4200; loop: true">
-    </a-entity>
+<a-entity butterfly="color:#c58a43; scale:1.7"
+position=".05 -.2 .15"
+animation="property:position; to:.35 -.5 .85; dur:4800; loop:true; dir:alternate">
+</a-entity>
 
-    <a-entity mixin="hoja" position="0.3 -0.1 0.2"
-      animation="property: position; to: 0.7 -0.4 0.8; dur: 3800; loop: true">
-    </a-entity>
+<a-entity butterfly="color:#fff0c5; scale:1"
+position="-.2 -.25 .2"
+animation="property:position; to:-.7 -.1 .8; dur:6000; loop:true; dir:alternate">
+</a-entity>
 
-    <a-entity mixin="hoja" position="-0.2 -0.2 0.1"
-      animation="property: position; to: -0.6 -0.5 0.9; dur: 4600; loop: true">
-    </a-entity>
+<!-- HOJAS DE OTOÑO -->
+<a-entity leaf="color:#b87525" position="-.25 .15 .1"
+animation="property:position; to:-.8 .55 .9; dur:5000; loop:true; dir:alternate"
+animation__spin="property:rotation; to:180 360 90; dur:4000; loop:true">
+</a-entity>
 
-    <!-- Mariposas doradas -->
-    <a-entity position="-0.15 0.1 0.3"
-      animation="property: position; to: -0.65 0.45 1; dur: 5000; loop: true; dir: alternate">
-      <a-sphere color="#ffd76b" scale="0.045 0.025 0.008"
-        position="-0.035 0.015 0"></a-sphere>
-      <a-sphere color="#ffe9a6" scale="0.045 0.025 0.008"
-        position="0.035 0.015 0"></a-sphere>
-      <a-cylinder color="#75451c" radius="0.005" height="0.06"
-        rotation="90 0 0"></a-cylinder>
-    </a-entity>
+<a-entity leaf="color:#d69b36" position=".3 .1 .15"
+animation="property:position; to:.75 .4 .8; dur:4300; loop:true; dir:alternate"
+animation__spin="property:rotation; to:360 180 180; dur:3500; loop:true">
+</a-entity>
 
-    <a-entity position="0.2 0.25 0.2"
-      animation="property: position; to: 0.65 0.55 1; dur: 6000; loop: true; dir: alternate">
-      <a-sphere color="#ffd76b" scale="0.04 0.025 0.008"
-        position="-0.035 0.015 0"></a-sphere>
-      <a-sphere color="#fff0bd" scale="0.04 0.025 0.008"
-        position="0.035 0.015 0"></a-sphere>
-      <a-cylinder color="#75451c" radius="0.005" height="0.06"
-        rotation="90 0 0"></a-cylinder>
-    </a-entity>
+<a-entity leaf="color:#a64f20" position="-.1 -.2 .15"
+animation="property:position; to:-.55 -.5 .8; dur:6000; loop:true; dir:alternate"
+animation__spin="property:rotation; to:180 360 270; dur:4500; loop:true">
+</a-entity>
 
-    <!-- Partículas luminosas -->
-    <a-sphere color="#ffe8a1" position="0 0 0.3" scale="0.025 0.025 0.025"
-      material="emissive: #ffd45c; emissiveIntensity: 2"
-      animation="property: position; to: 0.2 0.6 1; dur: 3000; loop: true">
-    </a-sphere>
+<a-entity leaf="color:#e6bb61" position=".2 -.15 .1"
+animation="property:position; to:.7 -.4 .9; dur:5200; loop:true; dir:alternate"
+animation__spin="property:rotation; to:360 180 90; dur:3800; loop:true">
+</a-entity>
 
-    <a-sphere color="#fff1c5" position="-0.3 -0.1 0.2" scale="0.018 0.018 0.018"
-      material="emissive: #ffe4a0; emissiveIntensity: 2"
-      animation="property: position; to: -0.7 0.4 0.8; dur: 4000; loop: true">
-    </a-sphere>
+<!-- DESTELLOS DORADOS -->
+<a-sphere position="-.3 .3 .3" radius=".018"
+material="color:#ffe5a0; emissive:#ffca55; emissiveIntensity:2"
+animation="property:position; to:-.6 .7 .8; dur:3000; loop:true; dir:alternate">
+</a-sphere>
 
-    <a-sphere color="#ffce55" position="0.3 -0.3 0.2" scale="0.02 0.02 0.02"
-      material="emissive: #ffce55; emissiveIntensity: 2"
-      animation="property: position; to: 0.7 0.3 0.9; dur: 3500; loop: true">
-    </a-sphere>
+<a-sphere position=".3 .2 .2" radius=".012"
+material="color:#fff0c0; emissive:#ffe3a0; emissiveIntensity:3"
+animation="property:position; to:.6 .6 .9; dur:3500; loop:true; dir:alternate">
+</a-sphere>
 
-  </a-entity>
+<a-sphere position="0 -.2 .2" radius=".015"
+material="color:#ffe5a0; emissive:#ffd15e; emissiveIntensity:2"
+animation="property:position; to:.2 -.6 .8; dur:4000; loop:true; dir:alternate">
+</a-sphere>
+
+<a-sphere position="-.15 -.1 .2" radius=".01"
+material="color:#fff5d5; emissive:#fff0bd; emissiveIntensity:3"
+animation="property:position; to:-.7 .2 .9; dur:3200; loop:true; dir:alternate">
+</a-sphere>
+
+</a-entity>
 </a-scene>
-
 </body>
 </html>
