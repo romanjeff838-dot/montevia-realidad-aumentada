@@ -2,120 +2,679 @@
 <html lang="es">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Montevía | Bosque encantado</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
+<title>Montevía | Bosque Encantado</title>
+
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
 <style>
-html,body{margin:0;height:100%;overflow:hidden;font-family:Georgia,serif}html{background:#000}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Georgia,serif}
+a-scene{position:fixed!important;inset:0;width:100%;height:100%;z-index:1}
 .a-enter-vr,.a-enter-ar,.a-orientation-modal{display:none!important}
-.ui{position:fixed;left:0;width:100%;text-align:center;z-index:5;pointer-events:none;transition:opacity 1.2s;text-shadow:0 2px 12px #000}
-#title{top:calc(22px + env(safe-area-inset-top));color:#f5d99a;font-size:19px;letter-spacing:2px}
-#hint{bottom:calc(30px + env(safe-area-inset-bottom));color:#fff0ce;font-size:14px}
+
+#title,#hint{
+position:fixed;left:0;width:100%;text-align:center;
+z-index:5;pointer-events:none;text-shadow:0 2px 12px #000;
+transition:opacity .7s
+}
+#title{top:calc(22px + env(safe-area-inset-top));color:#f5d99a;font-size:18px;letter-spacing:2px}
+#hint{bottom:calc(105px + env(safe-area-inset-bottom));color:#fff0ce;font-size:13px}
 body.found #title,body.found #hint{opacity:0}
-#glow,#dust{position:fixed;left:0;top:0;width:100%;height:100%;z-index:4;pointer-events:none;opacity:0;transition:opacity 2.5s}
-#glow{background:radial-gradient(ellipse at center,rgba(255,190,90,0) 50%,rgba(255,170,60,.32) 100%)}
-body.found #glow,body.found #dust{opacity:1}
+
+#glow{
+position:fixed;inset:0;z-index:2;pointer-events:none;opacity:0;
+background:radial-gradient(ellipse at center,transparent 45%,rgba(255,170,60,.2));
+transition:opacity 1s
+}
+body.found #glow{opacity:1}
+
+#controls{
+position:fixed;bottom:calc(20px + env(safe-area-inset-bottom));
+left:0;width:100%;z-index:10;display:none;
+justify-content:center;gap:15px;padding:0 15px;
+}
+body.found #controls{display:flex}
+
+.action{
+border:1px solid rgba(255,220,160,.65);
+background:rgba(25,20,15,.83);color:#ffe5ae;
+border-radius:30px;padding:13px 20px;
+font-size:13px;letter-spacing:1px;font-weight:bold;
+backdrop-filter:blur(8px);min-width:135px;
+}
+.action:active{transform:scale(.96)}
+#record.recording{background:#9b241b;color:white;border-color:#ffb0a0}
+#status{
+position:fixed;top:calc(65px + env(safe-area-inset-top));
+left:0;width:100%;text-align:center;z-index:12;
+color:#ffe4a9;font-size:12px;pointer-events:none;
+}
 </style>
-<script>
-(function(){
-const THREE=AFRAME.THREE,rnd=(a,b)=>a+Math.random()*(b-a),clamp=THREE.MathUtils.clamp;
-function tex(w,h,draw){const c=document.createElement('canvas');c.width=w;c.height=h;draw(c.getContext('2d'),w,h);const t=new THREE.CanvasTexture(c);if(THREE.SRGBColorSpace)t.colorSpace=THREE.SRGBColorSpace;return t}
-const glowTex=tex(64,64,(x,w,h)=>{const g=x.createRadialGradient(32,32,0,32,32,32);g.addColorStop(0,'rgba(255,255,255,1)');g.addColorStop(.3,'rgba(255,235,180,.55)');g.addColorStop(1,'rgba(255,210,120,0)');x.fillStyle=g;x.fillRect(0,0,w,h)});
-const rayTex=tex(64,256,(x,w,h)=>{let g=x.createLinearGradient(0,0,w,0);g.addColorStop(0,'rgba(255,225,150,0)');g.addColorStop(.5,'rgba(255,235,170,1)');g.addColorStop(1,'rgba(255,225,150,0)');x.fillStyle=g;x.fillRect(0,0,w,h);x.globalCompositeOperation='destination-in';g=x.createLinearGradient(0,0,0,h);g.addColorStop(0,'rgba(0,0,0,0)');g.addColorStop(.25,'rgba(0,0,0,1)');g.addColorStop(.75,'rgba(0,0,0,1)');g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(0,0,w,h)});
-const leafTex=tex(64,96,(x,w,h)=>{const g=x.createLinearGradient(0,0,w,0);g.addColorStop(0,'#e9c79a');g.addColorStop(.5,'#fff');g.addColorStop(1,'#e9c79a');x.fillStyle=g;x.fillRect(0,0,w,h);x.strokeStyle='rgba(90,40,10,.55)';x.lineWidth=2;x.beginPath();x.moveTo(w/2,h);x.lineTo(w/2,0);for(let i=1;i<6;i++){x.moveTo(w/2,h-i*h/7);x.lineTo(w*.12,h-i*h/7-14);x.moveTo(w/2,h-i*h/7);x.lineTo(w*.88,h-i*h/7-14)}x.stroke()});
-const wc={};
-function wingTex(p){return wc[p.k]||(wc[p.k]=tex(128,128,(x,w,h)=>{
- let g=x.createRadialGradient(0,h*.5,0,0,h*.5,w*1.1);g.addColorStop(0,p.b);g.addColorStop(.5,p.a);g.addColorStop(1,p.b);x.fillStyle=g;x.fillRect(0,0,w,h);
- x.strokeStyle='rgba(50,25,8,.5)';x.lineWidth=1.5;
- for(let i=0;i<8;i++){const y=h*(.08+.12*i);x.beginPath();x.moveTo(0,h*.5);x.quadraticCurveTo(w*.4,(h*.5+y)/2,w*.96,y);x.stroke()}
- g=x.createRadialGradient(0,h*.5,w*.62,0,h*.5,w*1.08);g.addColorStop(0,'rgba(30,14,4,0)');g.addColorStop(1,'rgba(30,14,4,.9)');x.fillStyle=g;x.fillRect(0,0,w,h);
- x.fillStyle=p.s;for(let i=-3;i<=3;i++){const a=i*.2,r=w*.8;x.beginPath();x.arc(Math.cos(a)*r,h*.5+Math.sin(a)*r,3,0,6.3);x.fill()}
-}))}
-const PAL=[{k:1,a:'#ffd25a',b:'#d9731c',s:'#fff3c4',g:'#ffcf6a'},{k:2,a:'#fff1c9',b:'#e0a85a',s:'#ffffff',g:'#ffe9b0'},{k:3,a:'#ffb347',b:'#b8481a',s:'#ffe8b0',g:'#ffa84a'},{k:4,a:'#9be0ff',b:'#2f7fd6',s:'#e9fbff',g:'#8fd8ff'}];
-function shapeGeo(s,bx,by,bw,bh){const g=new THREE.ShapeGeometry(s,18),p=g.attributes.position,u=g.attributes.uv;for(let i=0;i<p.count;i++)u.setXY(i,(p.getX(i)-bx)/bw,(p.getY(i)-by)/bh);return g}
-function wingGeo(){const s=new THREE.Shape();s.moveTo(0,.02);s.bezierCurveTo(.06,.2,.26,.36,.42,.28);s.bezierCurveTo(.47,.18,.4,.06,.26,0);s.bezierCurveTo(.36,-.04,.38,-.22,.24,-.3);s.bezierCurveTo(.12,-.34,.03,-.2,0,-.02);return shapeGeo(s,0,-.34,.47,.7)}
-function leafGeo(){const s=new THREE.Shape();s.moveTo(0,-.12);s.bezierCurveTo(.14,-.02,.12,.14,0,.26);s.bezierCurveTo(-.12,.14,-.14,-.02,0,-.12);return shapeGeo(s,-.14,-.12,.28,.38)}
-
-AFRAME.registerComponent('magic-forest',{
-schema:{aspect:{default:1.5}},
-init(){
- const A=this.data.aspect,root=this.root=new THREE.Group();this.el.object3D.add(root);
- this.t=0;this.t0=0;this.F=0;this.on=false;this.lostAt=-99;this.fx=[];
- const add=(m,b)=>{m.userData.base=b;m.transparent=true;m.depthWrite=false;this.fx.push(m);return m};
- const wg=wingGeo();
- // Mariposas
- this.bf=[0,1,2,3,1,0].map((pi,i)=>{
-  const p=PAL[pi],s=rnd(.15,.25),g=new THREE.Group(),lean=new THREE.Group(),mir=new THREE.Group(),pv=[new THREE.Group(),new THREE.Group()];
-  const m=add(new THREE.MeshBasicMaterial({map:wingTex(p),side:THREE.DoubleSide,toneMapped:false}),1);
-  pv.forEach(q=>q.add(new THREE.Mesh(wg,m)));mir.scale.x=-1;mir.add(pv[1]);
-  const body=new THREE.Mesh(new THREE.SphereGeometry(1,8,6),add(new THREE.MeshBasicMaterial({color:'#2a170b'}),1));body.scale.set(.02,.16,.02);
-  lean.add(pv[0],mir,body);lean.scale.setScalar(s);
-  const sp=new THREE.Sprite(add(new THREE.SpriteMaterial({map:glowTex,color:p.g,blending:THREE.AdditiveBlending}),.45));sp.scale.setScalar(s*2.4);
-  g.add(lean,sp);root.add(g);
-  return{g,lean,pv,d:i*.5,cx:rnd(-.3,.3),cy:rnd(-A*.3,A*.3),rx:rnd(.25,.45),ry:rnd(.2,.4),sp:rnd(.35,.6),ph:rnd(0,6.28),z0:rnd(.15,.45),za:rnd(.05,.15)}});
- // Hojas
- const lg=leafGeo();
- this.lv=[...Array(14)].map((_,i)=>{const m=add(new THREE.MeshBasicMaterial({map:leafTex,color:['#ffb347','#d9822b','#c0562b','#f2cf63','#e08a2e'][i%5],side:THREE.DoubleSide,toneMapped:false}),1);const me=new THREE.Mesh(lg,m);me.scale.setScalar(rnd(.28,.5));root.add(me);return{me,m,x:rnd(-.7,.7),z:rnd(.05,.7),v:rnd(.07,.13),o:rnd(0,A+.4),ph:rnd(0,6.28),rx:rnd(.8,2),ry:rnd(.8,2)}});
- // Luciérnagas
- const N=90,geo=new THREE.BufferGeometry();
- geo.setAttribute('position',new THREE.BufferAttribute(new Float32Array(N*3),3));geo.setAttribute('color',new THREE.BufferAttribute(new Float32Array(N*3),3));
- this.ff=[...Array(N)].map(()=>({x:rnd(-.75,.75),y:rnd(0,A+.3),z:rnd(.03,.9),r:rnd(.02,.07),ph:rnd(0,6.28),tw:rnd(1.5,4)}));
- this.pts=new THREE.Points(geo,add(new THREE.PointsMaterial({map:glowTex,size:.06,vertexColors:true,blending:THREE.AdditiveBlending}),1));this.pts.frustumCulled=false;root.add(this.pts);
- // Rayos de luz
- this.rays=[-.35,-.1,.15,.4].map((x,i)=>{const m=add(new THREE.MeshBasicMaterial({map:rayTex,color:'#ffe2a0',blending:THREE.AdditiveBlending,side:THREE.DoubleSide}),.2);const me=new THREE.Mesh(new THREE.PlaneGeometry(rnd(.18,.32),A*1.3),m);me.position.set(x,0,.06+i*.04);me.rotation.z=-.4;root.add(me);return{me,m,x,ph:rnd(0,6.28)}});
- // Onda de luz al despertar
- this.ring=new THREE.Mesh(new THREE.RingGeometry(.47,.5,64),new THREE.MeshBasicMaterial({color:'#ffd98a',blending:THREE.AdditiveBlending,transparent:true,depthWrite:false,opacity:0}));this.ring.position.z=.03;root.add(this.ring);
- this.el.addEventListener('targetFound',()=>{this.on=true;if(performance.now()/1000-this.lostAt>3){this.t0=this.t;this.F=0}});
- this.el.addEventListener('targetLost',()=>{this.on=false;this.lostAt=performance.now()/1000});
-},
-tick(_,dt){
- if(!this.on)return;dt=Math.min(dt,50)/1000;const t=this.t+=dt,A=this.data.aspect,s=t-this.t0,F=this.F=Math.min(1,this.F+dt*.8);
- this.fx.forEach(m=>m.opacity=m.userData.base*F);
- const r=clamp(s/1.8,0,1);this.ring.scale.setScalar(.2+r*2.2);this.ring.material.opacity=s<1.8?(1-r)*.7:0;
- this.bf.forEach(b=>{
-  const e=clamp((s-b.d)/3.2,0,1),k=1-Math.pow(1-e,3),u=t*b.sp+b.ph;
-  const P=u=>[b.cx+b.rx*Math.sin(u)+.05*Math.sin(u*2.3),b.cy+b.ry*Math.sin(u*.7+1)+.04*Math.sin(u*3.1),b.z0+b.za*Math.sin(u*.9+2)];
-  const p=P(u),q=P(u+.05);
-  b.g.position.set(p[0]*k,p[1]*k,.03+(p[2]-.03)*k);b.g.scale.setScalar(Math.max(k,.001));
-  b.lean.rotation.z+=(-clamp((q[0]-p[0])*30,-.6,.6)-b.lean.rotation.z)*.1;b.lean.rotation.x=.25+Math.sin(t*1.3+b.ph)*.1;
-  const a=.1+.95*(.5+.5*Math.sin(t*(11+b.ph)));b.pv[0].rotation.y=a;b.pv[1].rotation.y=a});
- const H=A+.4;
- this.lv.forEach(l=>{const f=((l.o+t*l.v)%H)/H;l.me.position.set(l.x+.08*Math.sin(t*.8+l.ph)+.05*Math.sin(t*1.9+l.ph),A/2+.2-f*H,l.z);l.me.rotation.set(t*l.rx+l.ph,t*l.ry,Math.sin(t*.9+l.ph)*.9);l.m.opacity=F*Math.min(1,f*8,(1-f)*8)});
- const pa=this.pts.geometry.attributes,HH=A+.3;
- this.ff.forEach((f,i)=>{const fr=((f.y+t*f.r*1.5)%HH)/HH;pa.position.setXYZ(i,f.x+.08*Math.sin(t*.5+f.ph),-A/2-.1+fr*HH,f.z+.05*Math.sin(t*.4+f.ph));const v=(.5+.5*Math.sin(t*f.tw+f.ph))*Math.min(1,fr*6,(1-fr)*6);pa.color.setXYZ(i,v,.82*v,.45*v)});
- pa.position.needsUpdate=pa.color.needsUpdate=true;
- this.rays.forEach(y=>{y.m.userData.base=.18+.14*Math.sin(t*.6+y.ph);y.me.position.x=y.x+.05*Math.sin(t*.3+y.ph)});
-}});
-})();
-</script>
 </head>
-<body>
-<div id="title" class="ui">MONTEVÍA · EL BOSQUE ENCANTADO</div>
-<div id="hint" class="ui">Despertando el bosque…</div>
-<div id="glow"></div>
-<canvas id="dust"></canvas>
 
-<!-- Para sumar otro cuadro: agrega su imagen al archivo targets.mind.txt y copia la línea de abajo con el siguiente targetIndex -->
-<a-scene mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: true; uiLoading: no; uiError: no; uiScanning: no; missTolerance: 15; warmupTolerance: 4" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+<body>
+
+<div id="title">MONTEVÍA · EL BOSQUE ENCANTADO</div>
+<div id="hint">Apunta la cámara hacia el cuadro</div>
+<div id="glow"></div>
+<div id="status"></div>
+
+<div id="controls">
+<button class="action" id="photo">◉ TOMAR FOTO</button>
+<button class="action" id="record">● GRABAR VIDEO</button>
+</div>
+
+<a-scene
+mindar-image="
+imageTargetSrc: ./targets.mind.txt;
+autoStart: true;
+uiLoading: no;
+uiError: no;
+uiScanning: no;
+missTolerance: 15;
+warmupTolerance: 4;
+filterMinCF: 0.0001;
+filterBeta: 0.01"
+renderer="
+antialias: false;
+alpha: true;
+precision: mediump;
+powerPreference: low-power;
+colorManagement: true;
+sortObjects: true"
+vr-mode-ui="enabled:false"
+device-orientation-permission-ui="enabled:false"
+embedded>
+
 <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
+
 <a-entity mindar-image-target="targetIndex:0" magic-forest="aspect:1.5"></a-entity>
+
 </a-scene>
 
 <script>
-// Polvo dorado que flota sobre la pantalla (envuelve a la persona)
-(()=>{const cv=document.getElementById('dust'),x=cv.getContext('2d'),dp=Math.min(devicePixelRatio||1,2);let W,H;const sz=()=>{W=cv.width=innerWidth*dp;H=cv.height=innerHeight*dp};sz();addEventListener('resize',sz);
-const sp=document.createElement('canvas');sp.width=sp.height=32;const sx=sp.getContext('2d'),g=sx.createRadialGradient(16,16,0,16,16,16);g.addColorStop(0,'rgba(255,240,190,1)');g.addColorStop(1,'rgba(255,200,100,0)');sx.fillStyle=g;sx.fillRect(0,0,32,32);
-const mk=i=>({x:Math.random()*W,y:i?Math.random()*H:H+20,r:(2+Math.random()*6)*dp,v:(10+Math.random()*30)*dp,w:Math.random()*6.3,s:1+Math.random()*2});
-const P=Array.from({length:50},()=>mk(1));let last=performance.now();
-(function L(n){requestAnimationFrame(L);const d=Math.min((n-last)/1000,.05);last=n;if(!document.body.classList.contains('found'))return;x.clearRect(0,0,W,H);x.globalCompositeOperation='lighter';P.forEach(p=>{p.y-=p.v*d;p.w+=d*p.s;p.x+=Math.sin(p.w)*12*dp*d;if(p.y<-20)Object.assign(p,mk(0));x.globalAlpha=.35+.35*Math.sin(p.w*2);x.drawImage(sp,p.x-p.r,p.y-p.r,p.r*2,p.r*2)})})(last)})();
-// Mostrar/ocultar textos y brillo al reconocer el cuadro
-let nf=0,to;document.querySelectorAll('[mindar-image-target]').forEach(e=>{
- e.addEventListener('targetFound',()=>{nf++;clearTimeout(to);document.body.classList.add('found')});
- e.addEventListener('targetLost',()=>{nf=Math.max(0,nf-1);if(!nf)to=setTimeout(()=>document.body.classList.remove('found'),1500)})});
-const sc=document.querySelector('a-scene'),h=document.getElementById('hint');
-sc.addEventListener('arReady',()=>h.textContent='Apunta al cuadro y descubre la magia');
-sc.addEventListener('arError',()=>h.textContent='No pude abrir la cámara. Permite el acceso y recarga la página.');
+(function(){
+
+const THREE=AFRAME.THREE;
+const rnd=(a,b)=>a+Math.random()*(b-a);
+const clamp=THREE.MathUtils.clamp;
+
+/* TEXTURAS PROCEDURALES */
+
+function texture(draw){
+ const c=document.createElement('canvas');
+ c.width=128;c.height=128;
+ const x=c.getContext('2d');
+ draw(x);
+ const t=new THREE.CanvasTexture(c);
+ t.colorSpace=THREE.SRGBColorSpace;
+ return t;
+}
+
+const wingTexture=texture(x=>{
+ const g=x.createLinearGradient(0,0,128,128);
+ g.addColorStop(0,'#ffe7a0');
+ g.addColorStop(.35,'#e89a37');
+ g.addColorStop(.7,'#b84c1e');
+ g.addColorStop(1,'#f4c66d');
+ x.fillStyle=g;x.fillRect(0,0,128,128);
+
+ x.strokeStyle='rgba(55,25,8,.65)';
+ x.lineWidth=1.5;
+
+ for(let i=0;i<12;i++){
+  x.beginPath();
+  x.moveTo(0,64);
+  x.quadraticCurveTo(55,i*11,128,i*10);
+  x.stroke();
+ }
+
+ x.fillStyle='rgba(255,245,205,.8)';
+ for(let i=0;i<7;i++){
+  x.beginPath();
+  x.arc(95,15+i*16,2,0,Math.PI*2);
+  x.fill();
+ }
+});
+
+const glowTexture=texture(x=>{
+ const g=x.createRadialGradient(64,64,0,64,64,64);
+ g.addColorStop(0,'rgba(255,245,190,.9)');
+ g.addColorStop(.35,'rgba(255,190,90,.35)');
+ g.addColorStop(1,'rgba(255,180,70,0)');
+ x.fillStyle=g;x.fillRect(0,0,128,128);
+});
+
+/* GEOMETRÍA DE ALAS */
+
+function createWing(){
+ const s=new THREE.Shape();
+ s.moveTo(0,0);
+ s.bezierCurveTo(.04,.20,.18,.36,.38,.30);
+ s.bezierCurveTo(.49,.25,.43,.07,.28,0);
+ s.bezierCurveTo(.39,-.08,.34,-.25,.20,-.29);
+ s.bezierCurveTo(.08,-.31,.02,-.16,0,0);
+ return new THREE.ShapeGeometry(s,12);
+}
+
+const wingGeo=createWing();
+
+const palettes=[
+ {color:'#fff0c2',scale:1},
+ {color:'#ffbd65',scale:1},
+ {color:'#f5d88d',scale:1},
+ {color:'#e7a7d0',scale:1}
+];
+
+/* COMPONENTE DE REALIDAD AUMENTADA */
+
+AFRAME.registerComponent('magic-forest',{
+ schema:{aspect:{default:1.5}},
+
+ init:function(){
+
+  const A=this.data.aspect;
+  const root=this.root=new THREE.Group();
+  this.el.object3D.add(root);
+
+  this.time=0;
+  this.active=false;
+  this.elapsed=0;
+  this.fade=0;
+
+  /* MATERIALES */
+
+  const wingMat=new THREE.MeshBasicMaterial({
+   map:wingTexture,
+   side:THREE.DoubleSide,
+   transparent:true,
+   depthWrite:false
+  });
+
+  const bodyMat=new THREE.MeshStandardMaterial({
+   color:'#3b2412',
+   roughness:.75
+  });
+
+  /* MARIPOSAS 3D */
+
+  this.butterflies=[];
+
+  for(let i=0;i<7;i++){
+
+   const group=new THREE.Group();
+   const body=new THREE.Mesh(
+    new THREE.CapsuleGeometry(.018,.16,3,6),
+    bodyMat
+   );
+
+   body.rotation.x=Math.PI/2;
+   group.add(body);
+
+   const leftPivot=new THREE.Group();
+   const rightPivot=new THREE.Group();
+
+   const leftWing=new THREE.Mesh(wingGeo,wingMat);
+   const rightWing=new THREE.Mesh(wingGeo,wingMat);
+
+   leftWing.position.x=.015;
+   rightWing.position.x=-.015;
+   rightWing.rotation.y=Math.PI;
+
+   leftPivot.add(leftWing);
+   rightPivot.add(rightWing);
+
+   group.add(leftPivot,rightPivot);
+
+   /* Antenas */
+
+   for(let j=-1;j<=1;j+=2){
+    const antenna=new THREE.Mesh(
+     new THREE.CylinderGeometry(.002,.003,.12,4),
+     bodyMat
+    );
+    antenna.position.set(j*.018,.09,.04);
+    antenna.rotation.z=j*.25;
+    group.add(antenna);
+   }
+
+   const light=new THREE.Sprite(
+    new THREE.SpriteMaterial({
+     map:glowTexture,
+     color:'#ffc66c',
+     transparent:true,
+     blending:THREE.AdditiveBlending,
+     depthWrite:false
+    })
+   );
+
+   light.scale.set(.45,.45,1);
+   group.add(light);
+
+   group.scale.setScalar(rnd(.55,.9));
+   root.add(group);
+
+   this.butterflies.push({
+    group,
+    leftPivot,
+    rightPivot,
+    phase:rnd(0,6.28),
+    speed:rnd(.65,1.15),
+    size:rnd(.8,1.2),
+    start:rnd(0,2.5),
+    x:rnd(-.35,.35),
+    y:rnd(-.3,.3),
+    z:rnd(.15,.4)
+   });
+  }
+
+  /* HOJAS */
+
+  const leafGeo=new THREE.SphereGeometry(1,5,4);
+  this.leaves=[];
+
+  for(let i=0;i<9;i++){
+   const mat=new THREE.MeshStandardMaterial({
+    color:['#d58b32','#b85b26','#e9b34d','#d4a044'][i%4],
+    roughness:1,
+    side:THREE.DoubleSide
+   });
+
+   const leaf=new THREE.Mesh(leafGeo,mat);
+   leaf.scale.set(.035,.085,.009);
+   root.add(leaf);
+
+   this.leaves.push({
+    mesh:leaf,
+    x:rnd(-.7,.7),
+    phase:rnd(0,6.28),
+    speed:rnd(.07,.15),
+    y:rnd(-A/2,A/2)
+   });
+  }
+
+  /* PARTÍCULAS */
+
+  const N=35;
+  const geo=new THREE.BufferGeometry();
+  const positions=new Float32Array(N*3);
+
+  this.particles=[];
+
+  for(let i=0;i<N;i++){
+   this.particles.push({
+    x:rnd(-.75,.75),
+    y:rnd(-A/2,A/2),
+    z:rnd(.05,.65),
+    phase:rnd(0,6.28),
+    speed:rnd(.15,.35)
+   });
+  }
+
+  geo.setAttribute('position',new THREE.BufferAttribute(positions,3));
+
+  const particleMat=new THREE.PointsMaterial({
+   color:'#ffd58c',
+   size:.045,
+   map:glowTexture,
+   transparent:true,
+   blending:THREE.AdditiveBlending,
+   depthWrite:false,
+   sizeAttenuation:true
+  });
+
+  this.points=new THREE.Points(geo,particleMat);
+  root.add(this.points);
+
+  /* ANILLO DE DESPERTAR */
+
+  this.ring=new THREE.Mesh(
+   new THREE.RingGeometry(.4,.42,40),
+   new THREE.MeshBasicMaterial({
+    color:'#ffd58c',
+    transparent:true,
+    opacity:0,
+    side:THREE.DoubleSide,
+    depthWrite:false
+   })
+  );
+
+  this.ring.position.z=.03;
+  root.add(this.ring);
+
+  this.el.addEventListener('targetFound',()=>{
+   if(!this.active){
+    this.active=true;
+    this.elapsed=0;
+   }
+  });
+
+  this.el.addEventListener('targetLost',()=>{
+   this.active=false;
+  });
+ },
+
+ tick:function(time,dt){
+
+  if(!this.active)return;
+
+  dt=Math.min(dt,40)/1000;
+  this.time+=dt;
+  this.elapsed+=dt;
+
+  const t=this.time;
+  const A=this.data.aspect;
+
+  this.fade=Math.min(1,this.fade+dt*.7);
+
+  /* ANILLO */
+
+  const pulse=(this.elapsed%2.5)/2.5;
+  this.ring.scale.setScalar(.5+pulse*2);
+  this.ring.material.opacity=(1-pulse)*.35*this.fade;
+
+  /* MARIPOSAS */
+
+  this.butterflies.forEach(b=>{
+
+   const age=Math.max(0,this.elapsed-b.start);
+   const emergence=clamp(age/2.8,0,1);
+   const ease=1-Math.pow(1-emergence,3);
+
+   const u=t*b.speed+b.phase;
+
+   const x=b.x+
+    Math.sin(u)*.34+
+    Math.sin(u*1.7)*.08;
+
+   const y=b.y+
+    Math.sin(u*.75)*.3+
+    Math.cos(u*1.5)*.05;
+
+   const z=b.z+
+    Math.sin(u*.8)*.22+
+    age*.045;
+
+   b.group.position.set(
+    x*ease,
+    y*ease,
+    z*ease
+   );
+
+   b.group.scale.setScalar(b.size*ease);
+
+   b.group.rotation.z=
+    Math.sin(u)*.22;
+
+   b.group.rotation.x=
+    Math.sin(u*.7)*.15;
+
+   /* ALETEO ARTICULADO */
+
+   const flap=Math.sin(t*12+b.phase)*.75;
+
+   b.leftPivot.rotation.y=flap;
+   b.rightPivot.rotation.y=-flap;
+
+  });
+
+  /* HOJAS */
+
+  this.leaves.forEach(l=>{
+   l.mesh.position.set(
+    l.x+Math.sin(t*.7+l.phase)*.08,
+    l.y+Math.sin(t*l.speed+l.phase)*.3,
+    .2+Math.sin(t*.8+l.phase)*.15
+   );
+
+   l.mesh.rotation.z=t*.7+l.phase;
+  });
+
+  /* PARTÍCULAS */
+
+  const pos=this.points.geometry.attributes.position;
+
+  this.particles.forEach((p,i)=>{
+   const y=((p.y+A/2+t*p.speed)%(A+.3))-A/2;
+
+   pos.setXYZ(
+    i,
+    p.x+Math.sin(t+p.phase)*.05,
+    y,
+    p.z
+   );
+  });
+
+  pos.needsUpdate=true;
+ }
+});
+
+})();
+</script>
+
+<script>
+/* INTERFAZ Y CAPTURA */
+
+const scene=document.querySelector('a-scene');
+const body=document.body;
+const status=document.getElementById('status');
+const photo=document.getElementById('photo');
+const record=document.getElementById('record');
+
+let found=false;
+let recorder=null;
+let chunks=[];
+let recording=false;
+let compositeCanvas=null;
+let compositeContext=null;
+let animationFrame=null;
+
+function getVideo(){
+ return document.querySelector('video');
+}
+
+function getRendererCanvas(){
+ return scene.canvas || scene.renderer?.domElement;
+}
+
+function prepareCanvas(){
+
+ const video=getVideo();
+ const renderer=getRendererCanvas();
+
+ if(!video || !renderer ||
+    !video.videoWidth || !video.videoHeight){
+  throw new Error('La cámara todavía no está lista');
+ }
+
+ const width=Math.min(video.videoWidth,1280);
+ const height=Math.round(width*video.videoHeight/video.videoWidth);
+
+ compositeCanvas=document.createElement('canvas');
+ compositeCanvas.width=width;
+ compositeCanvas.height=height;
+
+ compositeContext=compositeCanvas.getContext('2d',{
+  alpha:false
+ });
+
+ return {video,renderer};
+}
+
+function drawComposite(){
+
+ if(!recording)return;
+
+ const video=getVideo();
+ const renderer=getRendererCanvas();
+
+ if(video && renderer && video.readyState>=2){
+
+  const w=compositeCanvas.width;
+  const h=compositeCanvas.height;
+
+  compositeContext.drawImage(video,0,0,w,h);
+
+  compositeContext.drawImage(
+   renderer,
+   0,0,
+   w,h
+  );
+ }
+
+ animationFrame=requestAnimationFrame(drawComposite);
+}
+
+/* FOTO */
+
+photo.addEventListener('click',()=>{
+
+ try{
+
+  const {video,renderer}=prepareCanvas();
+
+  compositeContext.drawImage(
+   video,0,0,
+   compositeCanvas.width,
+   compositeCanvas.height
+  );
+
+  compositeContext.drawImage(
+   renderer,0,0,
+   compositeCanvas.width,
+   compositeCanvas.height
+  );
+
+  compositeCanvas.toBlob(blob=>{
+
+   if(!blob){
+    status.textContent='No se pudo crear la fotografía';
+    return;
+   }
+
+   const url=URL.createObjectURL(blob);
+   const a=document.createElement('a');
+
+   a.href=url;
+   a.download='Montevía-Bosque-Encantado.jpg';
+   a.click();
+
+   setTimeout(()=>URL.revokeObjectURL(url),3000);
+   status.textContent='Fotografía guardada';
+
+  },'image/jpeg',.88);
+
+ }catch(e){
+  status.textContent=e.message;
+ }
+});
+
+/* VIDEO */
+
+record.addEventListener('click',()=>{
+
+ if(recording){
+  recorder.stop();
+  return;
+ }
+
+ try{
+
+  prepareCanvas();
+
+  const stream=compositeCanvas.captureStream(24);
+
+  let mime='video/webm;codecs=vp8';
+
+  if(!MediaRecorder.isTypeSupported(mime)){
+   mime='video/webm';
+  }
+
+  if(!MediaRecorder.isTypeSupported(mime)){
+   throw new Error('Este navegador no admite grabación WebM');
+  }
+
+  chunks=[];
+
+  recorder=new MediaRecorder(stream,{
+   mimeType:mime,
+   videoBitsPerSecond:2500000
+  });
+
+  recorder.ondataavailable=e=>{
+   if(e.data && e.data.size>0)chunks.push(e.data);
+  };
+
+  recorder.onstop=()=>{
+
+   recording=false;
+   cancelAnimationFrame(animationFrame);
+
+   const blob=new Blob(chunks,{type:'video/webm'});
+   const url=URL.createObjectURL(blob);
+
+   const a=document.createElement('a');
+   a.href=url;
+   a.download='Montevía-Bosque-Encantado.webm';
+   a.click();
+
+   setTimeout(()=>URL.revokeObjectURL(url),5000);
+
+   record.textContent='● GRABAR VIDEO';
+   record.classList.remove('recording');
+   status.textContent='Video guardado';
+
+   stream.getTracks().forEach(track=>track.stop());
+  };
+
+  recorder.onerror=()=>{
+   status.textContent='Error durante la grabación';
+  };
+
+  recording=true;
+  record.textContent='■ DETENER VIDEO';
+  record.classList.add('recording');
+
+  recorder.start(500);
+  drawComposite();
+
+  status.textContent='Grabando experiencia…';
+
+ }catch(e){
+  recording=false;
+  status.textContent=e.message;
+ }
+});
+
+/* RECONOCIMIENTO DEL CUADRO */
+
+document.querySelectorAll('[mindar-image-target]').forEach(target=>{
+
+ target.addEventListener('targetFound',()=>{
+  found=true;
+  body.classList.add('found');
+  status.textContent='';
+ });
+
+ target.addEventListener('targetLost',()=>{
+  found=false;
+  body.classList.remove('found');
+ });
+});
+
+scene.addEventListener('arReady',()=>{
+ document.getElementById('hint').textContent=
+ 'Apunta al cuadro y descubre la magia';
+});
+
+scene.addEventListener('arError',()=>{
+ document.getElementById('hint').textContent=
+ 'No se pudo abrir la cámara. Revisa los permisos.';
+ status.textContent='Error de cámara';
+});
+
 </script>
 </body>
 </html>
