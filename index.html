@@ -1,767 +1,237 @@
+
 <!DOCTYPE html>
 <html lang="es">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>Montevía | Bosque encantado</title>
-
-<script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
-
-<style>
-*{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#000;font-family:Georgia,serif}
-.a-enter-vr,.a-enter-ar,.a-orientation-modal{display:none!important}
-.ui{position:fixed;left:0;width:100%;text-align:center;z-index:8;pointer-events:none;text-shadow:0 2px 12px #000;transition:opacity .7s}
-#title{top:calc(18px + env(safe-area-inset-top));color:#f5d99a;font-size:17px;letter-spacing:2px}
-#hint{bottom:calc(22px + env(safe-area-inset-bottom));color:#fff0ce;font:14px Arial,sans-serif;padding:0 20px}
-#controls{position:fixed;z-index:12;left:0;right:0;bottom:calc(65px + env(safe-area-inset-bottom));display:flex;justify-content:center;gap:14px;padding:0 18px;opacity:0;transform:translateY(12px);pointer-events:none;transition:.5s}
-body.found #controls{opacity:1;transform:none;pointer-events:auto}
-body.found #title,body.found #hint{opacity:0}
-.action{border:1px solid rgba(255,225,170,.8);background:rgba(28,20,13,.78);backdrop-filter:blur(8px);color:#ffe8b7;border-radius:30px;padding:13px 19px;min-width:145px;font:600 13px Arial,sans-serif;letter-spacing:.7px;box-shadow:0 4px 22px #0008;display:flex;align-items:center;justify-content:center;gap:9px}
-.action:active{transform:scale(.97)}
-.action svg{width:19px;height:19px;fill:none;stroke:currentColor;stroke-width:1.8}
-.action.recording{background:#8b2118;border-color:#ffb0a0;color:white}
-#status{position:fixed;z-index:13;top:calc(58px + env(safe-area-inset-top));left:50%;transform:translateX(-50%);background:#17120ddd;color:#ffe8b7;border:1px solid #b88a4b;border-radius:18px;padding:7px 13px;font:12px Arial,sans-serif;opacity:0;pointer-events:none;transition:opacity .2s;white-space:nowrap}
-#status.show{opacity:1}
-#glow,#dust{position:fixed;inset:0;width:100%;height:100%;z-index:4;pointer-events:none;opacity:0;transition:opacity 1.5s}
-#glow{background:radial-gradient(ellipse at center,transparent 48%,rgba(255,170,60,.22) 100%)}
-body.found #glow,body.found #dust{opacity:1}
-a-scene{position:fixed;inset:0}
-</style>
-
-<script>
-(function(){
-
-const THREE=AFRAME.THREE;
-const rnd=(a,b)=>a+Math.random()*(b-a);
-const clamp=THREE.MathUtils.clamp;
-
-function canvasTex(draw,w=256,h=256){
- const c=document.createElement('canvas');
- c.width=w;c.height=h;
- const x=c.getContext('2d');
- draw(x,w,h);
- const t=new THREE.CanvasTexture(c);
- t.colorSpace=THREE.SRGBColorSpace;
- t.anisotropy=8;
- return t;
-}
-
-const palettes=[
- {edge:'#9b4c19',mid:'#e89b32',light:'#ffe5a0',spot:'#54280f'},
- {edge:'#8e5d24',mid:'#e9c27a',light:'#fff6d9',spot:'#754019'},
- {edge:'#71321e',mid:'#c96b31',light:'#ffd08b',spot:'#4a2116'},
- {edge:'#174f85',mid:'#4ba5df',light:'#d8f6ff',spot:'#173d72'}
-];
-
-/* Textura de alas: degradado, nervaduras y microescamas */
-function makeWingTexture(p){
- return canvasTex((x,w,h)=>{
-  const g=x.createRadialGradient(24,120,8,95,120,150);
-  g.addColorStop(0,p.light);
-  g.addColorStop(.42,p.mid);
-  g.addColorStop(1,p.edge);
-  x.fillStyle=g;
-  x.fillRect(0,0,w,h);
-
-  /* Microescamas naturales */
-  for(let i=0;i<2600;i++){
-   const px=Math.random()*w;
-   const py=Math.random()*h;
-   const alpha=.035+Math.random()*.10;
-   x.fillStyle=`rgba(255,245,215,${alpha})`;
-   x.beginPath();
-   x.ellipse(px,py,1.1,2.2,rnd(-.5,.5),0,Math.PI*2);
-   x.fill();
-  }
-
-  /* Nervaduras principales */
-  x.strokeStyle='rgba(55,27,12,.62)';
-  x.lineWidth=2;
-  for(let i=0;i<9;i++){
-   x.beginPath();
-   x.moveTo(8,128);
-   x.quadraticCurveTo(65,70+i*9,245,15+i*28);
-   x.stroke();
-  }
-
-  /* Nervaduras secundarias */
-  x.strokeStyle='rgba(255,235,190,.36)';
-  x.lineWidth=.8;
-  for(let i=0;i<22;i++){
-   x.beginPath();
-   x.moveTo(18,125);
-   x.quadraticCurveTo(90,105+i*2,225,25+i*9);
-   x.stroke();
-  }
-
-  /* Manchas de pigmentación */
-  x.fillStyle=p.spot;
-  for(let i=0;i<5;i++){
-   x.beginPath();
-   x.arc(205+i%2*15,25+i*47,5,0,Math.PI*2);
-   x.fill();
-  }
-
-  /* Borde delicado */
-  x.strokeStyle='rgba(255,245,210,.6)';
-  x.lineWidth=1;
-  x.beginPath();
-  x.moveTo(10,128);
-  x.quadraticCurveTo(95,130,245,128);
-  x.stroke();
- },256,256);
-}
-
-const leafTexture=canvasTex((x,w,h)=>{
- const g=x.createLinearGradient(0,0,w,0);
- g.addColorStop(0,'#9c421d');
- g.addColorStop(.5,'#e9ae43');
- g.addColorStop(1,'#b95720');
- x.fillStyle=g;
- x.fillRect(0,0,w,h);
- x.strokeStyle='#693116';
- x.lineWidth=3;
- x.beginPath();
- x.moveTo(w/2,h);
- x.lineTo(w/2,0);
- for(let i=1;i<7;i++){
-  let y=h-i*h/7;
-  x.moveTo(w/2,y);
-  x.lineTo(12,y-12);
-  x.moveTo(w/2,y);
-  x.lineTo(w-12,y-12);
- }
- x.stroke();
-},64,96);
-
-function wingShape(){
- const s=new THREE.Shape();
- s.moveTo(0,0);
- s.bezierCurveTo(.06,.18,.20,.36,.43,.32);
- s.bezierCurveTo(.57,.29,.48,.08,.30,-.02);
- s.bezierCurveTo(.40,-.13,.36,-.30,.22,-.34);
- s.bezierCurveTo(.09,-.36,.025,-.18,0,0);
- return s;
-}
-
-function makeButterfly(p){
- const group=new THREE.Group();
- const body=new THREE.Group();
-
- const wingMat=new THREE.MeshStandardMaterial({
-  map:makeWingTexture(p),
-  roughness:.72,
-  metalness:.02,
-  side:THREE.DoubleSide,
-  transparent:true,
-  opacity:.98
- });
-
- const shape=wingShape();
- const geo=new THREE.ExtrudeGeometry(shape,{
-  depth:.012,
-  bevelEnabled:true,
-  bevelSegments:3,
-  steps:1,
-  bevelSize:.008,
-  bevelThickness:.006
- });
- geo.computeVertexNormals();
-
- const wings=[];
-
- for(let side of [-1,1]){
-  const pivot=new THREE.Group();
-  pivot.position.set(0,0,0);
-
-  const mesh=new THREE.Mesh(geo,wingMat);
-  mesh.scale.x=side;
-  mesh.position.z=.018;
-  pivot.add(mesh);
-  body.add(pivot);
-  wings.push({pivot,side});
-
-  /* Nervaduras tridimensionales */
-  const pts=[
-   new THREE.Vector3(.015,0,.035),
-   new THREE.Vector3(.13,.08,.04),
-   new THREE.Vector3(.38,.25,.04)
-  ];
-  const curve=new THREE.QuadraticBezierCurve3(...pts);
-  const vein=new THREE.Mesh(
-   new THREE.TubeGeometry(curve,16,.0025,4,false),
-   new THREE.MeshBasicMaterial({
-    color:p.light,
-    transparent:true,
-    opacity:.7
-   })
-  );
-  vein.scale.x=side;
-  pivot.add(vein);
- }
-
- /* Tórax */
- const thorax=new THREE.Mesh(
-  new THREE.SphereGeometry(.025,12,10),
-  new THREE.MeshStandardMaterial({color:'#342016',roughness:.9})
- );
- thorax.scale.set(.8,1.6,.8);
- body.add(thorax);
-
- /* Abdomen segmentado */
- const abdomen=new THREE.Group();
- for(let i=0;i<5;i++){
-  const segment=new THREE.Mesh(
-   new THREE.SphereGeometry(.014-i*.001,10,8),
-   new THREE.MeshStandardMaterial({
-    color:i%2?'#392016':'#654027',
-    roughness:.9
-   })
-  );
-  segment.position.y=-.045-i*.022;
-  abdomen.add(segment);
- }
- body.add(abdomen);
-
- /* Cabeza */
- const head=new THREE.Mesh(
-  new THREE.SphereGeometry(.025,12,10),
-  new THREE.MeshStandardMaterial({color:'#21150f'})
- );
- head.position.y=.045;
- body.add(head);
-
- /* Antenas curvas */
- for(let side of [-1,1]){
-  const pts=[
-   new THREE.Vector3(side*.008,.06,0),
-   new THREE.Vector3(side*.025,.13,.005),
-   new THREE.Vector3(side*.06,.16,.005)
-  ];
-  const c=new THREE.QuadraticBezierCurve3(...pts);
-  body.add(new THREE.Mesh(
-   new THREE.TubeGeometry(c,12,.0025,4,false),
-   new THREE.MeshBasicMaterial({color:'#3b2417'})
-  ));
- }
-
- group.add(body);
- group.userData={wings,body};
- return group;
-}
-
-AFRAME.registerComponent('magic-forest',{
- schema:{aspect:{default:1.5}},
-
- init(){
-  const A=this.data.aspect;
-  this.root=new THREE.Group();
-  this.el.object3D.add(this.root);
-  this.t=0;
-  this.start=0;
-  this.active=false;
-  this.butterflies=[];
-
-  /* Mariposas */
-  for(let i=0;i<11;i++){
-   const p=palettes[i%palettes.length];
-   const b=makeButterfly(p);
-   const size=rnd(.16,.24);
-   b.scale.setScalar(size);
-   this.root.add(b);
-
-   this.butterflies.push({
-    obj:b,
-    delay:i*.38,
-    x:rnd(-.38,.38),
-    y:rnd(-A*.30,A*.30),
-    z:rnd(.01,.08),
-    phase:rnd(0,6.28),
-    speed:rnd(.55,1.05),
-    size,
-    turn:rnd(.7,1.5),
-    drift:rnd(.13,.28),
-    flapSpeed:rnd(9,14),
-    flapPhase:rnd(0,6.28)
-   });
-  }
-
-  /* Hojas tridimensionales */
-  const leafShape=new THREE.Shape();
-  leafShape.moveTo(0,-.13);
-  leafShape.bezierCurveTo(.12,-.02,.13,.13,0,.25);
-  leafShape.bezierCurveTo(-.13,.13,-.12,-.02,0,-.13);
-
-  const leafGeo=new THREE.ShapeGeometry(leafShape,12);
-  this.leaves=[];
-
-  for(let i=0;i<18;i++){
-   const mat=new THREE.MeshStandardMaterial({
-    map:leafTexture,
-    color:['#f4b84f','#d97a2d','#a94b24'][i%3],
-    side:THREE.DoubleSide,
-    transparent:true,
-    roughness:.85
-   });
-
-   const m=new THREE.Mesh(leafGeo,mat);
-   m.scale.setScalar(rnd(.22,.42));
-   this.root.add(m);
-
-   this.leaves.push({
-    m,
-    x:rnd(-.7,.7),
-    z:rnd(.08,.75),
-    phase:rnd(0,6.28),
-    speed:rnd(.06,.13),
-    spin:rnd(.7,1.8)
-   });
-  }
-
-  /* Partículas doradas */
-  const N=85;
-  const g=new THREE.BufferGeometry();
-  const pos=new Float32Array(N*3);
-  this.specks=[];
-
-  for(let i=0;i<N;i++){
-   this.specks.push({
-    x:rnd(-.75,.75),
-    y:rnd(-A/2,A/2),
-    z:rnd(.08,.8),
-    phase:rnd(0,6.28),
-    speed:rnd(1,3)
-   });
-   pos.set([0,0,0],i*3);
-  }
-
-  g.setAttribute('position',new THREE.BufferAttribute(pos,3));
-
-  this.dust=new THREE.Points(
-   g,
-   new THREE.PointsMaterial({
-    color:'#ffdb8a',
-    size:.025,
-    transparent:true,
-    opacity:.75,
-    depthWrite:false
-   })
-  );
-
-  this.root.add(this.dust);
-
-  this.el.addEventListener('targetFound',()=>{
-   this.active=true;
-   this.start=this.t;
-  });
-
-  this.el.addEventListener('targetLost',()=>{
-   this.active=false;
-  });
- },
-
- tick(_,dt){
-  if(!this.active)return;
-
-  const d=Math.min(dt||16,50)/1000;
-  this.t+=d;
-
-  const t=this.t;
-  const A=this.data.aspect;
-
-  this.butterflies.forEach((b,i)=>{
-   const age=t-this.start-b.delay;
-
-   if(age<0){
-    b.obj.visible=false;
-    return;
-   }
-
-   b.obj.visible=true;
-
-   const emerge=clamp(age/1.5,0,1);
-   const ease=1-Math.pow(1-emerge,3);
-   const u=t*b.speed+b.phase;
-
-   const x=b.x+
-    Math.sin(u*.85)*b.drift+
-    Math.sin(u*1.7)*.045;
-
-   const y=b.y+
-    Math.sin(u*.72+b.phase)*.16+
-    Math.cos(u*1.4)*.035;
-
-   const z=b.z+
-    Math.min(age*.19,.95)+
-    .07*Math.sin(u*.8);
-
-   b.obj.position.set(x*ease,y*ease,z);
-
-   /* Movimiento orgánico */
-   b.obj.rotation.set(
-    .12*Math.sin(u),
-    Math.sin(u*.65)*.35,
-    Math.sin(u*.8)*.32
-   );
-
-   b.obj.scale.setScalar(
-    b.size*ease*(1+.035*Math.sin(u*2))
-   );
-
-   /* Aleteo con pequeñas variaciones naturales */
-   const flap=.15+
-    Math.abs(Math.sin(t*b.flapSpeed+b.flapPhase))*1.05;
-
-   b.obj.userData.wings.forEach(w=>{
-    const variation=.08*Math.sin(u*1.4+w.side);
-    w.pivot.rotation.y=w.side*(flap+variation);
-    w.pivot.rotation.z=w.side*(.08+.06*Math.sin(u*1.4));
-   });
-  });
-
-  this.leaves.forEach((l)=>{
-   const u=t*l.speed+l.phase;
-
-   l.m.position.set(
-    l.x+Math.sin(u*2)*.09,
-    ((l.phase+t*l.speed*2)%(A+.5))-A/2,
-    l.z+.06*Math.sin(u)
-   );
-
-   l.m.rotation.set(
-    .5*Math.sin(u),
-    u*l.spin,
-    Math.sin(u*.8)*.8
-   );
-  });
-
-  const a=this.dust.geometry.attributes.position;
-
-  this.specks.forEach((p,i)=>{
-   const u=t*p.speed+p.phase;
-   a.setXYZ(
-    i,
-    p.x+.06*Math.sin(u),
-    p.y+.05*Math.cos(u*.7),
-    p.z
-   );
-  });
-
-  a.needsUpdate=true;
- }
-});
-
-})();
-</script>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Montevía - Bosque encantado</title>
+
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #10150e;
+      font-family: Arial, sans-serif;
+    }
+
+    a-scene { position: fixed; inset: 0; }
+
+    .panel {
+      position: fixed;
+      z-index: 20;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      padding: 28px;
+      text-align: center;
+      color: #f7e5bd;
+      background: linear-gradient(145deg, #18251a, #080b08);
+    }
+
+    .panel h1 {
+      font-family: Georgia, serif;
+      font-weight: normal;
+      letter-spacing: 3px;
+    }
+
+    .panel p {
+      line-height: 1.5;
+      max-width: 330px;
+    }
+
+    button {
+      padding: 15px 25px;
+      border: 1px solid #e4bd72;
+      border-radius: 30px;
+      background: #49351d;
+      color: #fff0cf;
+      font-size: 15px;
+      margin-top: 15px;
+    }
+
+    #error {
+      color: #ffb7a8;
+      overflow-wrap: anywhere;
+      font-size: 13px;
+    }
+
+    #status {
+      position: fixed;
+      z-index: 10;
+      top: 15px;
+      left: 12px;
+      right: 12px;
+      color: white;
+      text-align: center;
+      font-size: 13px;
+      text-shadow: 0 2px 5px black;
+      pointer-events: none;
+    }
+
+    #cameraPreview {
+      display: none;
+    }
+
+    .a-enter-vr, .a-enter-ar, .a-orientation-modal {
+      display: none !important;
+    }
+  </style>
 </head>
 
 <body>
-
-<div id="title" class="ui">MONTEVÍA · EL BOSQUE ENCANTADO</div>
-<div id="hint" class="ui">Apunta la cámara al cuadro para despertar el bosque</div>
-<div id="glow"></div>
-<canvas id="dust"></canvas>
-
-<div id="controls">
- <button class="action" id="photo" type="button">
-  <svg viewBox="0 0 24 24">
-   <path d="M4 7h3l1.5-2h7L17 7h3v12H4z"/>
-   <circle cx="12" cy="13" r="4"/>
-  </svg>
-  TOMAR FOTO
- </button>
-
- <button class="action" id="video" type="button">
-  <svg viewBox="0 0 24 24">
-   <rect x="3" y="6" width="13" height="12" rx="2"/>
-   <path d="m16 10 5-3v10l-5-3z"/>
-  </svg>
-  GRABAR VIDEO
- </button>
-</div>
-
-<div id="status"></div>
-
-<a-scene
- mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: true; uiLoading: no; uiError: no; uiScanning: no; missTolerance: 15; warmupTolerance: 4"
- vr-mode-ui="enabled:false"
- device-orientation-permission-ui="enabled:false"
- renderer="alpha:true;antialias:true;colorManagement:true"
- color-space="sRGB">
-
- <a-camera position="0 0 0" look-controls="enabled:false"></a-camera>
-
- <a-entity
-  mindar-image-target="targetIndex:0"
-  magic-forest="aspect:1.5">
- </a-entity>
-
-</a-scene>
-
-<script>
-(()=>{
- const cv=document.getElementById('dust');
- const ctx=cv.getContext('2d');
- let W,H;
-
- function resize(){
-  const d=Math.min(devicePixelRatio||1,2);
-  W=cv.width=innerWidth*d;
-  H=cv.height=innerHeight*d;
- }
-
- resize();
- addEventListener('resize',resize);
-
- const sprite=document.createElement('canvas');
- sprite.width=sprite.height=32;
-
- const s=sprite.getContext('2d');
- const gr=s.createRadialGradient(16,16,0,16,16,16);
-
- gr.addColorStop(0,'rgba(255,240,190,.9)');
- gr.addColorStop(1,'rgba(255,200,100,0)');
-
- s.fillStyle=gr;
- s.fillRect(0,0,32,32);
-
- const particles=Array.from({length:45},()=>({
-  x:Math.random()*W,
-  y:Math.random()*H,
-  r:2+Math.random()*5,
-  v:10+Math.random()*28,
-  p:Math.random()*6.28
- }));
-
- let last=performance.now();
-
- function loop(now){
-  requestAnimationFrame(loop);
-
-  const d=Math.min((now-last)/1000,.05);
-  last=now;
-
-  if(!document.body.classList.contains('found'))return;
-
-  ctx.clearRect(0,0,W,H);
-  ctx.globalCompositeOperation='lighter';
-
-  particles.forEach(p=>{
-   p.y-=p.v*d;
-   p.p+=d*1.5;
-   p.x+=Math.sin(p.p)*8*d;
-
-   if(p.y<-20){
-    p.y=H+20;
-    p.x=Math.random()*W;
-   }
-
-   ctx.globalAlpha=.25+.3*Math.sin(p.p*2);
-   ctx.drawImage(sprite,p.x-p.r,p.y-p.r,p.r*2,p.r*2);
-  });
- }
-
- requestAnimationFrame(loop);
-})();
-
-const scene=document.querySelector('a-scene');
-const target=document.querySelector('[mindar-image-target]');
-const status=document.getElementById('status');
-
-let found=false;
-let recorder=null;
-let chunks=[];
-let raf=0;
-
-function showStatus(t){
- status.textContent=t;
- status.classList.add('show');
- clearTimeout(showStatus.timer);
- showStatus.timer=setTimeout(()=>{
-  status.classList.remove('show');
- },2300);
-}
-
-target.addEventListener('targetFound',()=>{
- found=true;
- document.body.classList.add('found');
-});
-
-target.addEventListener('targetLost',()=>{
- found=false;
- document.body.classList.remove('found');
-});
-
-function getVideo(){
- return document.querySelector('video');
-}
-
-function getRendererCanvas(){
- return scene.renderer&&scene.renderer.domElement;
-}
-
-function drawCover(c,v,w,h){
- const vw=v.videoWidth||w;
- const vh=v.videoHeight||h;
- const scale=Math.max(w/vw,h/vh);
- const sw=w/scale;
- const sh=h/scale;
- const sx=(vw-sw)/2;
- const sy=(vh-sh)/2;
- c.drawImage(v,sx,sy,sw,sh,0,0,w,h);
-}
-
-function makeComposite(){
- const video=getVideo();
- const ar=getRendererCanvas();
-
- if(!video||!ar||!video.videoWidth){
-  throw new Error('La cámara aún no está lista');
- }
-
- const c=document.createElement('canvas');
- const d=Math.min(devicePixelRatio||1,2);
-
- c.width=innerWidth*d;
- c.height=innerHeight*d;
-
- const x=c.getContext('2d');
-
- const paint=()=>{
-  if(video.readyState>=2){
-   drawCover(x,video,c.width,c.height);
-  }
-
-  x.drawImage(ar,0,0,c.width,c.height);
-
-  /* Añade el resplandor dorado a la captura */
-  const gradient=x.createRadialGradient(
-   c.width/2,c.height/2,c.height*.2,
-   c.width/2,c.height/2,c.height*.8
-  );
-
-  gradient.addColorStop(0,'rgba(255,170,60,0)');
-  gradient.addColorStop(1,'rgba(255,170,60,.17)');
-
-  x.fillStyle=gradient;
-  x.fillRect(0,0,c.width,c.height);
-
-  /* Incluye las partículas luminosas */
-  const dust=document.getElementById('dust');
-  if(dust)x.drawImage(dust,0,0,c.width,c.height);
- };
-
- const loop=()=>{
-  if(!recorder||recorder.state!=='recording')return;
-  paint();
-  raf=requestAnimationFrame(loop);
- };
-
- paint();
-
- return{canvas:c,paint,loop};
-}
-
-document.getElementById('photo').addEventListener('click',()=>{
- if(!found){
-  showStatus('Primero enfoca el cuadro');
-  return;
- }
-
- try{
-  const comp=makeComposite();
-  comp.paint();
-
-  const a=document.createElement('a');
-  a.href=comp.canvas.toDataURL('image/jpeg',.94);
-  a.download='montevia-bosque-encantado.jpg';
-  a.click();
-
-  showStatus('¡Fotografía guardada!');
- }catch(e){
-  showStatus('No se pudo capturar. Espera a que abra la cámara.');
- }
-});
-
-document.getElementById('video').addEventListener('click',async()=>{
- const btn=document.getElementById('video');
-
- if(recorder&&recorder.state==='recording'){
-  recorder.stop();
-  btn.classList.remove('recording');
-
-  btn.innerHTML=
-   '<svg viewBox="0 0 24 24"><rect x="3" y="6" width="13" height="12" rx="2"/><path d="m16 10 5-3v10l-5-3z"/></svg> GRABAR VIDEO';
-
-  return;
- }
-
- if(!found){
-  showStatus('Primero enfoca el cuadro');
-  return;
- }
-
- try{
-  const comp=makeComposite();
-  const stream=comp.canvas.captureStream(30);
-
-  const mime=MediaRecorder.isTypeSupported('video/webm;codecs=vp9')
-   ?'video/webm;codecs=vp9'
-   :(MediaRecorder.isTypeSupported('video/webm;codecs=vp8')
-   ?'video/webm;codecs=vp8'
-   :'video/webm');
-
-  chunks=[];
-
-  recorder=new MediaRecorder(stream,{mimeType:mime});
-
-  recorder.ondataavailable=e=>{
-   if(e.data&&e.data.size)chunks.push(e.data);
-  };
-
-  recorder.onstop=()=>{
-   cancelAnimationFrame(raf);
-
-   const blob=new Blob(chunks,{type:'video/webm'});
-   const url=URL.createObjectURL(blob);
-   const a=document.createElement('a');
-
-   a.href=url;
-   a.download='montevia-bosque-encantado.webm';
-   a.click();
-
-   setTimeout(()=>URL.revokeObjectURL(url),60000);
-
-   stream.getTracks().forEach(t=>t.stop());
-   showStatus('¡Video listo!');
-  };
-
-  recorder.start();
-
-  btn.classList.add('recording');
-  btn.textContent='■ DETENER';
-
-  comp.loop();
-
-  showStatus('Grabando la experiencia…');
-
- }catch(e){
-  showStatus('Tu navegador no pudo iniciar la grabación');
- }
-});
-
-scene.addEventListener('arReady',()=>{
- document.getElementById('hint').textContent=
-  'Apunta al cuadro y descubre la magia';
-});
-
-scene.addEventListener('arError',()=>{
- document.getElementById('hint').textContent=
-  'Permite el acceso a la cámara y recarga la página';
-});
-
-</script>
+  <div id="start" class="panel">
+    <h1>MONTEVÍA</h1>
+    <p>El bosque encantado</p>
+    <p>Permite el acceso a la cámara y apunta al cuadro para despertar la experiencia.</p>
+    <button id="startButton">INICIAR EXPERIENCIA</button>
+    <p id="error"></p>
+  </div>
+
+  <div id="status">Preparando experiencia...</div>
+
+  <a-scene
+    id="scene"
+    mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: false; uiLoading: no; uiError: no; uiScanning: no"
+    color-space="sRGB"
+    renderer="colorManagement: true; physicallyCorrectLights: true; alpha: true; antialias: true"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false">
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <a-entity mindar-image-target="targetIndex: 0">
+      <a-ring
+        position="0 0 0.02"
+        radius-inner="0.43"
+        radius-outer="0.47"
+        color="#e5b75e"
+        material="shader: flat; opacity: 0.8">
+      </a-ring>
+
+      <a-sphere
+        position="0 0.15 0.12"
+        radius="0.10"
+        color="#f7d88d"
+        material="emissive: #b97824; emissiveIntensity: 0.7">
+        <a-animation
+          attribute="scale"
+          dur="1800"
+          direction="alternate"
+          repeat="indefinite"
+          to="1.3 1.3 1.3">
+        </a-animation>
+      </a-sphere>
+
+      <a-text
+        value="MONTEVÍA"
+        position="0 -0.38 0.08"
+        align="center"
+        color="#f7e5bd"
+        width="1.5">
+      </a-text>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const startButton = document.getElementById("startButton");
+    const startPanel = document.getElementById("start");
+    const errorBox = document.getElementById("error");
+    const statusBox = document.getElementById("status");
+    const scene = document.getElementById("scene");
+
+    function showError(message) {
+      errorBox.textContent = message;
+      statusBox.textContent = "No se pudo iniciar la experiencia";
+    }
+
+    startButton.addEventListener("click", async () => {
+      startButton.disabled = true;
+      startButton.textContent = "INICIANDO...";
+      errorBox.textContent = "";
+      statusBox.textContent = "Comprobando archivos...";
+
+      try {
+        if (!window.isSecureContext) {
+          throw new Error("Abre la experiencia desde HTTPS.");
+        }
+
+        if (!navigator.mediaDevices ||
+            !navigator.mediaDevices.getUserMedia) {
+          throw new Error("Este navegador no permite acceder a la cámara.");
+        }
+
+        const response = await fetch("./targets.mind.txt", {
+          cache: "no-store"
+        });
+
+        if (!response.ok) {
+          throw new Error(
+            "No se encuentra targets.mind.txt. Comprueba que esté publicado junto a index.html."
+          );
+        }
+
+        if (!window.AFRAME || !window.MINDAR) {
+          throw new Error("No se pudieron cargar las librerías de realidad aumentada. Comprueba tu conexión.");
+        }
+
+        statusBox.textContent = "Solicitando acceso a la cámara...";
+
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: false,
+          video: {
+            facingMode: { ideal: "environment" },
+            width: { ideal: 1280 },
+            height: { ideal: 720 }
+          }
+        });
+
+        stream.getTracks().forEach(track => track.stop());
+
+        statusBox.textContent = "Iniciando reconocimiento del cuadro...";
+        const arSystem = scene.systems["mindar-image-system"];
+
+        if (!arSystem) {
+          throw new Error("MindAR no se ha inicializado correctamente.");
+        }
+
+        await scene.renderer && scene.renderer.compile(
+          scene.object3D,
+          scene.camera
+        );
+
+        await arSystem.start();
+
+        startPanel.style.display = "none";
+        statusBox.textContent = "Apunta al cuadro de Montevía";
+
+      } catch (error) {
+        console.error(error);
+        showError(error.message || "Error desconocido al iniciar.");
+        startButton.disabled = false;
+        startButton.textContent = "INTENTAR DE NUEVO";
+      }
+    });
+
+    scene.addEventListener("targetFound", () => {
+      statusBox.textContent = "¡El bosque encantado ha despertado!";
+    });
+
+    scene.addEventListener("targetLost", () => {
+      statusBox.textContent = "Vuelve a enfocar el cuadro";
+    });
+
+    scene.addEventListener("arError", event => {
+      console.error("Error de realidad aumentada:", event);
+      showError("MindAR encontró un error. Revisa la consola del navegador.");
+    });
+  </script>
 </body>
 </html>
