@@ -1,4 +1,3 @@
-
 <!doctype html>
 <html lang="es">
 <head>
@@ -9,716 +8,94 @@
 <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
 <style>
-*{box-sizing:border-box}
-html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#090d09;font-family:Arial,sans-serif}
-a-scene{position:fixed!important;inset:0;width:100%;height:100%;z-index:1}
-.a-enter-vr,.a-enter-ar,.a-orientation-modal{display:none!important}
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#090d09;font-family:Arial,sans-serif;isolation:isolate}/* MindAR coloca el video de cámara detrás de la página; lo subimos por encima del fondo y dejamos la escena 3D transparente encima. */video{z-index:0!important}a-scene{position:fixed!important;inset:0;width:100%;height:100%;z-index:1!important;background:transparent!important}a-scene canvas{background:transparent!important}.a-enter-vr,.a-enter-ar,.a-orientation-modal{display:none!important}
 #title{position:fixed;z-index:5;top:calc(16px + env(safe-area-inset-top));left:0;right:0;text-align:center;color:#f7dfaa;font:16px Georgia,serif;letter-spacing:2px;text-shadow:0 2px 12px #000;pointer-events:none}
 #hint{position:fixed;z-index:5;left:16px;right:16px;bottom:calc(100px + env(safe-area-inset-bottom));text-align:center;color:#fff0cf;font-size:13px;text-shadow:0 2px 8px #000;pointer-events:none}
 #controls{position:fixed;z-index:30;left:0;right:0;bottom:calc(18px + env(safe-area-inset-bottom));display:flex;justify-content:center;gap:10px;padding:0 12px}
-.action{min-width:0;flex:1;max-width:190px;padding:13px 10px;border:1px solid #d9b36c;border-radius:28px;background:rgba(24,20,14,.88);color:#ffedc8;font-size:12px;font-weight:700;letter-spacing:.4px;box-shadow:0 4px 18px #0008;backdrop-filter:blur(6px)}
-.action:disabled{opacity:.55}
-.action.recording{background:#8e241b;border-color:#ffb8a7;color:#fff}
+.action{min-width:0;flex:1;max-width:190px;padding:13px 10px;border:1px solid #d9b36c;border-radius:28px;background:rgba(24,20,14,.88);color:#ffedc8;font-size:12px;font-weight:700;letter-spacing:.4px;box-shadow:0 4px 18px #0008;backdrop-filter:blur(6px)}.action:disabled{opacity:.55}.action.recording{background:#8e241b;border-color:#ffb8a7;color:#fff}
 #status{position:fixed;z-index:40;top:calc(52px + env(safe-area-inset-top));left:12px;right:12px;margin:auto;max-width:460px;padding:9px 12px;border:1px solid #c49b5d;border-radius:12px;background:rgba(10,12,9,.88);color:#ffe9bd;text-align:center;font-size:12px;line-height:1.4;pointer-events:none}
-#start{position:fixed;z-index:50;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;background:radial-gradient(ellipse at center,#263321,#080b08 75%);color:#f7e5bd;text-align:center}
-#start h1{font:normal 27px Georgia,serif;letter-spacing:4px;margin:0 0 8px}
-#start p{max-width:330px;line-height:1.5;font-size:14px}
-#start button{margin-top:15px;border:1px solid #e4bd72;border-radius:28px;padding:15px 28px;background:#49351d;color:#fff0cf;font-weight:bold}
-#startError{color:#ffc0ae;overflow-wrap:anywhere;font-size:12px;max-width:340px}
-#glow{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(255,170,60,.20) 100%);transition:opacity .6s}
-body.found #glow{opacity:1}
+#start{position:fixed;z-index:50;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:28px;background:radial-gradient(ellipse at center,#263321,#080b08 75%);color:#f7e5bd;text-align:center}#start h1{font:normal 27px Georgia,serif;letter-spacing:4px;margin:0 0 8px}#start p{max-width:330px;line-height:1.5;font-size:14px}#start button{margin-top:15px;border:1px solid #e4bd72;border-radius:28px;padding:15px 28px;background:#49351d;color:#fff0cf;font-weight:bold}#startError{color:#ffc0ae;overflow-wrap:anywhere;font-size:12px;max-width:340px}
+#glow{position:fixed;inset:0;z-index:4;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 45%,rgba(255,170,60,.20) 100%);transition:opacity .6s}body.found #glow{opacity:1}
 </style>
-
 <script>
 (function(){
 'use strict';
 const THREE=AFRAME.THREE;
 const rand=(a,b)=>a+Math.random()*(b-a);
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-
-function texture(draw,w=256,h=256){
- const c=document.createElement('canvas');
- c.width=w;c.height=h;
- const g=c.getContext('2d');
- draw(g,w,h);
- const t=new THREE.CanvasTexture(c);
- t.colorSpace=THREE.SRGBColorSpace;
- t.anisotropy=4;
- return t;
-}
-
+function texture(draw,w=256,h=256){const c=document.createElement('canvas');c.width=w;c.height=h;const g=c.getContext('2d');draw(g,w,h);const t=new THREE.CanvasTexture(c);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;}
 const palettes=[
  {edge:'#71351c',mid:'#d98231',light:'#ffe1a0',spot:'#512614'},
  {edge:'#76501f',mid:'#d9b56b',light:'#fff2cf',spot:'#68401c'},
  {edge:'#542b20',mid:'#b85d31',light:'#ffd095',spot:'#3b1c17'},
  {edge:'#174a76',mid:'#4595c7',light:'#d8f4ff',spot:'#17365c'}
 ];
-
-function wingMap(p){
- return texture((c,w,h)=>{
-  const gr=c.createRadialGradient(45,125,5,115,125,155);
-  gr.addColorStop(0,p.light);
-  gr.addColorStop(.42,p.mid);
-  gr.addColorStop(1,p.edge);
-  c.fillStyle=gr;
-  c.fillRect(0,0,w,h);
-
-  for(let i=0;i<1500;i++){
-   c.fillStyle=`rgba(255,245,220,${rand(.025,.09)})`;
-   c.beginPath();
-   c.ellipse(rand(0,w),rand(0,h),rand(.5,1.3),rand(1,2.5),rand(-.5,.5),0,Math.PI*2);
-   c.fill();
-  }
-
-  c.strokeStyle='rgba(48,25,14,.55)';
-  c.lineWidth=1.5;
-  for(let i=0;i<10;i++){
-   c.beginPath();
-   c.moveTo(9,128);
-   c.quadraticCurveTo(80,65+i*9,247,10+i*26);
-   c.stroke();
-  }
-
-  c.strokeStyle='rgba(255,238,195,.36)';
-  c.lineWidth=.7;
-  for(let i=0;i<16;i++){
-   c.beginPath();
-   c.moveTo(14,128);
-   c.quadraticCurveTo(95,100+i*2,238,25+i*12);
-   c.stroke();
-  }
-
-  c.fillStyle=p.spot;
-  for(let i=0;i<5;i++){
-   c.beginPath();
-   c.arc(207+(i%2)*12,22+i*48,4,0,Math.PI*2);
-   c.fill();
-  }
- },256,256);
-}
-
-const leafMap=texture((c,w,h)=>{
- const gr=c.createLinearGradient(0,0,w,0);
- gr.addColorStop(0,'#963b1c');
- gr.addColorStop(.5,'#e7a63e');
- gr.addColorStop(1,'#a94a20');
- c.fillStyle=gr;
- c.fillRect(0,0,w,h);
- c.strokeStyle='#663219';
- c.lineWidth=2;
- c.beginPath();
- c.moveTo(w/2,h);
- c.lineTo(w/2,0);
- for(let i=1;i<7;i++){
-  let y=h-i*h/7;
-  c.moveTo(w/2,y);
-  c.lineTo(8,y-10);
-  c.moveTo(w/2,y);
-  c.lineTo(w-8,y-10);
- }
- c.stroke();
-},64,96);
-
+function wingMap(p){return texture((c,w,h)=>{
+ const gr=c.createRadialGradient(45,125,5,115,125,155);gr.addColorStop(0,p.light);gr.addColorStop(.42,p.mid);gr.addColorStop(1,p.edge);c.fillStyle=gr;c.fillRect(0,0,w,h);
+ for(let i=0;i<1500;i++){c.fillStyle=`rgba(255,245,220,${rand(.025,.09)})`;c.beginPath();c.ellipse(rand(0,w),rand(0,h),rand(.5,1.3),rand(1,2.5),rand(-.5,.5),0,Math.PI*2);c.fill();}
+ c.strokeStyle='rgba(48,25,14,.55)';c.lineWidth=1.5;for(let i=0;i<10;i++){c.beginPath();c.moveTo(9,128);c.quadraticCurveTo(80,65+i*9,247,10+i*26);c.stroke();}
+ c.strokeStyle='rgba(255,238,195,.36)';c.lineWidth=.7;for(let i=0;i<16;i++){c.beginPath();c.moveTo(14,128);c.quadraticCurveTo(95,100+i*2,238,25+i*12);c.stroke();}
+ c.fillStyle=p.spot;for(let i=0;i<5;i++){c.beginPath();c.arc(207+(i%2)*12,22+i*48,4,0,Math.PI*2);c.fill();}
+ },256,256);}
+const leafMap=texture((c,w,h)=>{const gr=c.createLinearGradient(0,0,w,0);gr.addColorStop(0,'#963b1c');gr.addColorStop(.5,'#e7a63e');gr.addColorStop(1,'#a94a20');c.fillStyle=gr;c.fillRect(0,0,w,h);c.strokeStyle='#663219';c.lineWidth=2;c.beginPath();c.moveTo(w/2,h);c.lineTo(w/2,0);for(let i=1;i<7;i++){let y=h-i*h/7;c.moveTo(w/2,y);c.lineTo(8,y-10);c.moveTo(w/2,y);c.lineTo(w-8,y-10);}c.stroke();},64,96);
 function createButterfly(p){
- const root=new THREE.Group();
- const body=new THREE.Group();
- const wings=[];
-
- const s=new THREE.Shape();
- s.moveTo(0,0);
- s.bezierCurveTo(.07,.17,.22,.36,.43,.31);
- s.bezierCurveTo(.57,.27,.49,.08,.30,-.015);
- s.bezierCurveTo(.42,-.14,.35,-.31,.21,-.34);
- s.bezierCurveTo(.08,-.35,.025,-.17,0,0);
-
- const geo=new THREE.ExtrudeGeometry(s,{
-  depth:.009,
-  bevelEnabled:true,
-  bevelSegments:2,
-  steps:1,
-  bevelSize:.006,
-  bevelThickness:.004
- });
- geo.computeVertexNormals();
-
- const mat=new THREE.MeshStandardMaterial({
-  map:wingMap(p),
-  side:THREE.DoubleSide,
-  roughness:.8,
-  metalness:0
- });
-
- for(const side of [-1,1]){
-  const pivot=new THREE.Group();
-  const mesh=new THREE.Mesh(geo,mat);
-  mesh.scale.x=side;
-  mesh.position.z=.012;
-  pivot.add(mesh);
-
-  const points=[
-   new THREE.Vector3(.01,0,.025),
-   new THREE.Vector3(.13,.09,.03),
-   new THREE.Vector3(.39,.25,.03)
-  ];
-  const curve=new THREE.QuadraticBezierCurve3(...points);
-  const vein=new THREE.Mesh(
-   new THREE.TubeGeometry(curve,12,.0018,4,false),
-   new THREE.MeshBasicMaterial({color:p.light,transparent:true,opacity:.65})
-  );
-  vein.scale.x=side;
-  pivot.add(vein);
-  body.add(pivot);
-  wings.push({pivot,side});
- }
-
- const thorax=new THREE.Mesh(
-  new THREE.SphereGeometry(.022,10,8),
-  new THREE.MeshStandardMaterial({color:'#302018',roughness:1})
- );
- thorax.scale.set(.8,1.5,.8);
- body.add(thorax);
-
- const abdomen=new THREE.Group();
- for(let i=0;i<5;i++){
-  const seg=new THREE.Mesh(
-   new THREE.SphereGeometry(.012-i*.001,8,7),
-   new THREE.MeshStandardMaterial({
-    color:i%2?'#3a2418':'#74502d',
-    roughness:1
-   })
-  );
-  seg.position.y=-.035-i*.018;
-  abdomen.add(seg);
- }
- body.add(abdomen);
-
- const head=new THREE.Mesh(
-  new THREE.SphereGeometry(.021,10,8),
-  new THREE.MeshStandardMaterial({color:'#21150f'})
- );
- head.position.y=.04;
- body.add(head);
-
- for(const side of [-1,1]){
-  const curve=new THREE.QuadraticBezierCurve3(
-   new THREE.Vector3(side*.006,.055,0),
-   new THREE.Vector3(side*.025,.12,.005),
-   new THREE.Vector3(side*.052,.15,.005)
-  );
-  body.add(new THREE.Mesh(
-   new THREE.TubeGeometry(curve,10,.0018,4,false),
-   new THREE.MeshBasicMaterial({color:'#382316'})
-  ));
- }
-
- root.add(body);
- root.userData.wings=wings;
- return root;
+ const root=new THREE.Group(),body=new THREE.Group(),wings=[];
+ const s=new THREE.Shape();s.moveTo(0,0);s.bezierCurveTo(.07,.17,.22,.36,.43,.31);s.bezierCurveTo(.57,.27,.49,.08,.30,-.015);s.bezierCurveTo(.42,-.14,.35,-.31,.21,-.34);s.bezierCurveTo(.08,-.35,.025,-.17,0,0);
+ const geo=new THREE.ExtrudeGeometry(s,{depth:.009,bevelEnabled:true,bevelSegments:2,steps:1,bevelSize:.006,bevelThickness:.004});geo.computeVertexNormals();
+ const mat=new THREE.MeshStandardMaterial({map:wingMap(p),side:THREE.DoubleSide,roughness:.8,metalness:0});
+ for(const side of [-1,1]){const pivot=new THREE.Group();const mesh=new THREE.Mesh(geo,mat);mesh.scale.x=side;mesh.position.z=.012;pivot.add(mesh);const points=[new THREE.Vector3(.01,0,.025),new THREE.Vector3(.13,.09,.03),new THREE.Vector3(.39,.25,.03)];const curve=new THREE.QuadraticBezierCurve3(...points);const vein=new THREE.Mesh(new THREE.TubeGeometry(curve,12,.0018,4,false),new THREE.MeshBasicMaterial({color:p.light,transparent:true,opacity:.65}));vein.scale.x=side;pivot.add(vein);body.add(pivot);wings.push({pivot,side});}
+ const thorax=new THREE.Mesh(new THREE.SphereGeometry(.022,10,8),new THREE.MeshStandardMaterial({color:'#302018',roughness:1}));thorax.scale.set(.8,1.5,.8);body.add(thorax);
+ const abdomen=new THREE.Group();for(let i=0;i<5;i++){const seg=new THREE.Mesh(new THREE.SphereGeometry(.012-i*.001,8,7),new THREE.MeshStandardMaterial({color:i%2?'#3a2418':'#74502d',roughness:1}));seg.position.y=-.035-i*.018;abdomen.add(seg);}body.add(abdomen);
+ const head=new THREE.Mesh(new THREE.SphereGeometry(.021,10,8),new THREE.MeshStandardMaterial({color:'#21150f'}));head.position.y=.04;body.add(head);
+ for(const side of [-1,1]){const curve=new THREE.QuadraticBezierCurve3(new THREE.Vector3(side*.006,.055,0),new THREE.Vector3(side*.025,.12,.005),new THREE.Vector3(side*.052,.15,.005));body.add(new THREE.Mesh(new THREE.TubeGeometry(curve,10,.0018,4,false),new THREE.MeshBasicMaterial({color:'#382316'})));}
+ root.add(body);root.userData.wings=wings;return root;
 }
-
-AFRAME.registerComponent('magic-forest',{
- schema:{height:{default:1.5}},
-
- init:function(){
-  this.root=new THREE.Group();
-  this.el.object3D.add(this.root);
-  this.clock=0;
-  this.foundAt=0;
-  this.active=false;
-  this.butterflies=[];
-  const H=this.data.height;
-
-  // Las mariposas nacen en el cuadro y avanzan hacia la cámara.
-  for(let i=0;i<9;i++){
-   const obj=createButterfly(palettes[i%palettes.length]);
-   const size=rand(.14,.21);
-   obj.scale.setScalar(size);
-   this.root.add(obj);
-   this.butterflies.push({
-    obj,
-    delay:i*.42,
-    x:rand(-.34,.34),
-    y:rand(-H*.32,H*.32),
-    z:rand(.015,.07),
-    phase:rand(0,6.28),
-    speed:rand(.65,1.0),
-    size,
-    drift:rand(.10,.22),
-    flap:rand(9,13)
-   });
-  }
-
-  const leafShape=new THREE.Shape();
-  leafShape.moveTo(0,-.12);
-  leafShape.bezierCurveTo(.11,-.02,.12,.12,0,.22);
-  leafShape.bezierCurveTo(-.12,.12,-.11,-.02,0,-.12);
-  const leafGeo=new THREE.ShapeGeometry(leafShape,8);
-  this.leaves=[];
-
-  for(let i=0;i<12;i++){
-   const m=new THREE.Mesh(
-    leafGeo,
-    new THREE.MeshStandardMaterial({
-     map:leafMap,
-     side:THREE.DoubleSide,
-     roughness:1
-    })
-   );
-   m.scale.setScalar(rand(.20,.34));
-   this.root.add(m);
-   this.leaves.push({
-    m,
-    x:rand(-.65,.65),
-    z:rand(.12,.55),
-    phase:rand(0,6.28),
-    speed:rand(.07,.13),
-    spin:rand(.6,1.3)
-   });
-  }
-
-  const N=55;
-  const geo=new THREE.BufferGeometry();
-  const positions=new Float32Array(N*3);
-  this.particles=[];
-
-  for(let i=0;i<N;i++){
-   this.particles.push({
-    x:rand(-.7,.7),
-    y:rand(-H/2,H/2),
-    z:rand(.1,.7),
-    phase:rand(0,6.28),
-    speed:rand(.8,2)
-   });
-  }
-
-  geo.setAttribute('position',new THREE.BufferAttribute(positions,3));
-  this.points=new THREE.Points(
-   geo,
-   new THREE.PointsMaterial({
-    color:'#ffda8a',
-    size:.018,
-    transparent:true,
-    opacity:.8,
-    depthWrite:false
-   })
-  );
-  this.root.add(this.points);
-
-  this.el.addEventListener('targetFound',()=>{
-   this.active=true;
-   this.foundAt=this.clock;
-  });
-
-  this.el.addEventListener('targetLost',()=>{
-   this.active=false;
-  });
- },
-
- tick:function(time,dt){
-  if(!this.active)return;
-  const delta=Math.min((dt||16)/1000,.04);
-  this.clock+=delta;
-  const t=this.clock;
-  const H=this.data.height;
-
-  this.butterflies.forEach(b=>{
-   const age=t-this.foundAt-b.delay;
-   if(age<0){
-    b.obj.visible=false;
-    return;
-   }
-
-   b.obj.visible=true;
-   const k=clamp(age/1.35,0,1);
-   const ease=1-Math.pow(1-k,3);
-   const u=t*b.speed+b.phase;
-
-   const x=b.x+Math.sin(u*.8)*b.drift+Math.sin(u*1.5)*.035;
-   const y=b.y+Math.sin(u*.7+b.phase)*.13+Math.cos(u*1.3)*.025;
-   const z=b.z+Math.min(age*.15,.8)+.045*Math.sin(u);
-
-   b.obj.position.set(x*ease,y*ease,z);
-   b.obj.rotation.set(
-    .10*Math.sin(u),
-    Math.sin(u*.6)*.30,
-    Math.sin(u*.75)*.25
-   );
-   b.obj.scale.setScalar(b.size*ease*(1+.025*Math.sin(u*2)));
-
-   const flap=.12+Math.abs(Math.sin(t*b.flap+b.phase))*.95;
-   b.obj.userData.wings.forEach(w=>{
-    w.pivot.rotation.y=w.side*flap;
-    w.pivot.rotation.z=w.side*(.06+.04*Math.sin(u));
-   });
-  });
-
-  this.leaves.forEach(l=>{
-   const u=t*l.speed+l.phase;
-   l.m.position.set(
-    l.x+Math.sin(u*2)*.07,
-    ((l.phase+t*l.speed*1.4)%(H+.5))-H/2,
-    l.z+.04*Math.sin(u)
-   );
-   l.m.rotation.set(
-    .4*Math.sin(u),
-    u*l.spin,
-    Math.sin(u*.8)*.65
-   );
-  });
-
-  const a=this.points.geometry.attributes.position;
-  this.particles.forEach((p,i)=>{
-   const u=t*p.speed+p.phase;
-   a.setXYZ(
-    i,
-    p.x+.045*Math.sin(u),
-    p.y+.035*Math.cos(u*.7),
-    p.z
-   );
-  });
-  a.needsUpdate=true;
- }
-});
+AFRAME.registerComponent('magic-forest',{schema:{height:{default:1.5}},init:function(){
+ this.root=new THREE.Group();this.el.object3D.add(this.root);this.clock=0;this.foundAt=0;this.active=false;this.butterflies=[];const H=this.data.height;
+ // Las mariposas aparecen desde el plano del cuadro y avanzan hacia la cámara (Z positivo).
+ for(let i=0;i<9;i++){const obj=createButterfly(palettes[i%palettes.length]);const size=rand(.14,.21);obj.scale.setScalar(size);this.root.add(obj);this.butterflies.push({obj,delay:i*.42,x:rand(-.34,.34),y:rand(-H*.32,H*.32),z:rand(.015,.07),phase:rand(0,6.28),speed:rand(.65,1.0),size,drift:rand(.10,.22),flap:rand(9,13)});}
+ const leafShape=new THREE.Shape();leafShape.moveTo(0,-.12);leafShape.bezierCurveTo(.11,-.02,.12,.12,0,.22);leafShape.bezierCurveTo(-.12,.12,-.11,-.02,0,-.12);const leafGeo=new THREE.ShapeGeometry(leafShape,8);this.leaves=[];
+ for(let i=0;i<12;i++){const m=new THREE.Mesh(leafGeo,new THREE.MeshStandardMaterial({map:leafMap,side:THREE.DoubleSide,roughness:1}));m.scale.setScalar(rand(.20,.34));this.root.add(m);this.leaves.push({m,x:rand(-.65,.65),z:rand(.12,.55),phase:rand(0,6.28),speed:rand(.07,.13),spin:rand(.6,1.3)});}
+ const N=55,geo=new THREE.BufferGeometry(),positions=new Float32Array(N*3);this.particles=[];for(let i=0;i<N;i++){this.particles.push({x:rand(-.7,.7),y:rand(-H/2,H/2),z:rand(.1,.7),phase:rand(0,6.28),speed:rand(.8,2)});}geo.setAttribute('position',new THREE.BufferAttribute(positions,3));this.points=new THREE.Points(geo,new THREE.PointsMaterial({color:'#ffda8a',size:.018,transparent:true,opacity:.8,depthWrite:false}));this.root.add(this.points);
+ this.el.addEventListener('targetFound',()=>{this.active=true;this.foundAt=this.clock;});this.el.addEventListener('targetLost',()=>{this.active=false;});
+ },tick:function(time,dt){if(!this.active)return;const delta=Math.min((dt||16)/1000,.04);this.clock+=delta;const t=this.clock,H=this.data.height;
+ this.butterflies.forEach(b=>{const age=t-this.foundAt-b.delay;if(age<0){b.obj.visible=false;return;}b.obj.visible=true;const k=clamp(age/1.35,0,1),ease=1-Math.pow(1-k,3),u=t*b.speed+b.phase;const x=b.x+Math.sin(u*.8)*b.drift+Math.sin(u*1.5)*.035;const y=b.y+Math.sin(u*.7+b.phase)*.13+Math.cos(u*1.3)*.025;const z=b.z+Math.min(age*.15,.8)+.045*Math.sin(u);b.obj.position.set(x*ease,y*ease,z);b.obj.rotation.set(.10*Math.sin(u),Math.sin(u*.6)*.30,Math.sin(u*.75)*.25);b.obj.scale.setScalar(b.size*ease*(1+.025*Math.sin(u*2)));const flap=.12+Math.abs(Math.sin(t*b.flap+b.phase))*.95;b.obj.userData.wings.forEach(w=>{w.pivot.rotation.y=w.side*flap;w.pivot.rotation.z=w.side*(.06+.04*Math.sin(u));});});
+ this.leaves.forEach(l=>{const u=t*l.speed+l.phase;l.m.position.set(l.x+Math.sin(u*2)*.07,((l.phase+t*l.speed*1.4)%(H+.5))-H/2,l.z+.04*Math.sin(u));l.m.rotation.set(.4*Math.sin(u),u*l.spin,Math.sin(u*.8)*.65);});const a=this.points.geometry.attributes.position;this.particles.forEach((p,i)=>{const u=t*p.speed+p.phase;a.setXYZ(i,p.x+.045*Math.sin(u),p.y+.035*Math.cos(u*.7),p.z);});a.needsUpdate=true;
+ }});
 })();
 </script>
 </head>
-
 <body>
-<div id="title">MONTEVÍA · EL BOSQUE ENCANTADO</div>
-<div id="hint">Pulsa iniciar y apunta al cuadro</div>
-<div id="glow"></div>
+<div id="title">MONTEVÍA · EL BOSQUE ENCANTADO</div><div id="hint">Pulsa iniciar y apunta al cuadro</div><div id="glow"></div>
 <div id="status">Esperando para iniciar…</div>
-
-<div id="controls">
- <button class="action" id="photo" disabled>◉ TOMAR FOTO</button>
- <button class="action" id="video" disabled>● GRABAR VIDEO</button>
-</div>
-
-<div id="start">
- <h1>MONTEVÍA</h1>
- <p>El bosque encantado</p>
- <p>Activa la cámara y apunta al cuadro para ver despertar las mariposas.</p>
- <button id="startButton">INICIAR EXPERIENCIA</button>
- <div id="startError"></div>
-</div>
-
-<a-scene
- id="scene"
- embedded
- mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; maxTrack: 1"
- renderer="alpha: true; antialias: true; colorManagement: true; precision: mediump; preserveDrawingBuffer: true"
- color-space="sRGB"
- vr-mode-ui="enabled: false"
- device-orientation-permission-ui="enabled: false">
-
- <a-entity light="type: ambient; intensity: 1.1; color: #fff0d5"></a-entity>
- <a-entity light="type: directional; intensity: 1.25; color: #ffe0a0" position="-1 2 3"></a-entity>
- <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
- <a-entity mindar-image-target="targetIndex: 0" magic-forest="height: 1.5"></a-entity>
+<div id="controls"><button class="action" id="photo" disabled>◉ TOMAR FOTO</button><button class="action" id="video" disabled>● GRABAR VIDEO</button></div>
+<div id="start"><h1>MONTEVÍA</h1><p>El bosque encantado</p><p>Activa la cámara y apunta al cuadro para ver despertar las mariposas.</p><button id="startButton">INICIAR EXPERIENCIA</button><div id="startError"></div></div>
+<a-scene id="scene" embedded mindar-image="imageTargetSrc: ./targets.mind.txt; autoStart: false; uiLoading: no; uiError: no; uiScanning: no; maxTrack: 1" renderer="alpha: true; antialias: true; colorManagement: true; precision: mediump; preserveDrawingBuffer: true" color-space="sRGB" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false">
+<a-entity light="type: ambient; intensity: 1.1; color: #fff0d5"></a-entity><a-entity light="type: directional; intensity: 1.25; color: #ffe0a0" position="-1 2 3"></a-entity>
+<a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+<a-entity mindar-image-target="targetIndex: 0" magic-forest="height: 1.5"></a-entity>
 </a-scene>
-
 <script>
-(()=>{
-'use strict';
-
-const $=id=>document.getElementById(id);
-const scene=$('scene');
-const target=document.querySelector('[mindar-image-target]');
-const start=$('start');
-const startButton=$('startButton');
-const startError=$('startError');
-const status=$('status');
-const photo=$('photo');
-const videoButton=$('video');
-
-let arSystem=null;
-let found=false;
-let recorder=null;
-let recordStream=null;
-let recordCanvas=null;
-let recordCtx=null;
-let recordRAF=0;
-let chunks=[];
-
-function say(t){
- status.textContent=t;
-}
-
-function error(t){
- startError.textContent=t;
- say(t);
- startButton.disabled=false;
- startButton.textContent='INTENTAR DE NUEVO';
-}
-
-function targetChanged(value){
- found=value;
- document.body.classList.toggle('found',value);
- photo.disabled=!value;
- videoButton.disabled=!value||(!window.MediaRecorder);
- $('hint').textContent=value?'¡El bosque ha despertado!':'Vuelve a enfocar el cuadro';
- say(value?'¡Cuadro reconocido! Ya puedes tomar fotos o grabar.':'Buscando el cuadro…');
-}
-
-function cameraVideo(){
- return document.querySelector('video');
-}
-
-function fitDraw(ctx,source,w,h){
- const sw=source.videoWidth||source.width;
- const sh=source.videoHeight||source.height;
- if(!sw||!sh)return;
- const scale=Math.max(w/sw,h/sh);
- const cw=w/scale;
- const ch=h/scale;
- ctx.drawImage(source,(sw-cw)/2,(sh-ch)/2,cw,ch,0,0,w,h);
-}
-
-function drawComposite(){
- const v=cameraVideo();
- const gl=scene.renderer&&scene.renderer.domElement;
- if(!v||v.readyState<2||!gl||!recordCtx)return;
-
- const w=recordCanvas.width;
- const h=recordCanvas.height;
-
- recordCtx.clearRect(0,0,w,h);
- fitDraw(recordCtx,v,w,h);
- recordCtx.drawImage(gl,0,0,w,h);
-
- const g=recordCtx.createRadialGradient(
-  w/2,h/2,h*.20,
-  w/2,h/2,h*.78
- );
- g.addColorStop(0,'rgba(255,190,95,0)');
- g.addColorStop(1,'rgba(255,170,65,.17)');
- recordCtx.fillStyle=g;
- recordCtx.fillRect(0,0,w,h);
-}
-
-function setupComposite(){
- const v=cameraVideo();
- const gl=scene.renderer&&scene.renderer.domElement;
-
- if(!v||!gl||!v.videoWidth){
-  throw new Error('La cámara todavía no entrega imagen. Espera unos segundos y vuelve a intentar.');
- }
-
- const ratio=innerWidth/innerHeight;
- const max=1280;
- let w,h;
-
- if(ratio>=1){
-  w=max;
-  h=Math.round(max/ratio);
- }else{
-  h=max;
-  w=Math.round(max*ratio);
- }
-
- recordCanvas=document.createElement('canvas');
- recordCanvas.width=w;
- recordCanvas.height=h;
- recordCtx=recordCanvas.getContext('2d',{alpha:false});
- drawComposite();
-}
-
-function capturePhoto(){
- try{
-  setupComposite();
-  drawComposite();
-
-  recordCanvas.toBlob(blob=>{
-   if(!blob){
-    say('No se pudo generar la fotografía.');
-    return;
-   }
-
-   const url=URL.createObjectURL(blob);
-   const a=document.createElement('a');
-   a.href=url;
-   a.download='montevia-bosque-encantado.jpg';
-   a.click();
-   setTimeout(()=>URL.revokeObjectURL(url),30000);
-   say('Fotografía guardada.');
-  },'image/jpeg',.92);
-
- }catch(e){
-  say(e.message);
- }
-}
-
-function stopRecording(){
- if(recorder&&recorder.state!=='inactive'){
-  recorder.stop();
- }
- videoButton.textContent='● GRABAR VIDEO';
- videoButton.classList.remove('recording');
-}
-
-function startRecording(){
- try{
-  if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream){
-   throw new Error('Este navegador no admite grabación de video desde la experiencia. Prueba con Chrome actualizado.');
-  }
-
-  setupComposite();
-  const stream=recordCanvas.captureStream(24);
-  recordStream=stream;
-
-  const mimeTypes=[
-   'video/webm;codecs=vp9',
-   'video/webm;codecs=vp8',
-   'video/webm'
-  ];
-  const mime=mimeTypes.find(m=>MediaRecorder.isTypeSupported(m));
-
-  if(!mime){
-   throw new Error('El navegador no ofrece un formato de grabación compatible.');
-  }
-
-  chunks=[];
-  recorder=new MediaRecorder(stream,{
-   mimeType:mime,
-   videoBitsPerSecond:3500000
-  });
-
-  recorder.ondataavailable=e=>{
-   if(e.data&&e.data.size)chunks.push(e.data);
-  };
-
-  recorder.onerror=()=>{
-   say('El navegador informó un error durante la grabación.');
-  };
-
-  recorder.onstop=()=>{
-   cancelAnimationFrame(recordRAF);
-
-   const blob=new Blob(chunks,{
-    type:recorder.mimeType||'video/webm'
-   });
-
-   const url=URL.createObjectURL(blob);
-   const a=document.createElement('a');
-   a.href=url;
-   a.download='montevia-bosque-encantado.webm';
-   a.click();
-
-   setTimeout(()=>URL.revokeObjectURL(url),60000);
-
-   if(recordStream){
-    recordStream.getTracks().forEach(t=>t.stop());
-   }
-
-   recordStream=null;
-   recorder=null;
-   say('Video guardado en formato WebM.');
-  };
-
-  recorder.start(500);
-  videoButton.textContent='■ DETENER VIDEO';
-  videoButton.classList.add('recording');
-  say('Grabando… pulsa DETENER VIDEO para guardar.');
-
-  const draw=()=>{
-   if(!recorder||recorder.state!=='recording')return;
-   drawComposite();
-   recordRAF=requestAnimationFrame(draw);
-  };
-
-  draw();
-
- }catch(e){
-  say(e.message);
- }
-}
-
-photo.addEventListener('click',capturePhoto);
-
-videoButton.addEventListener('click',()=>{
- if(recorder&&recorder.state==='recording'){
-  stopRecording();
- }else{
-  startRecording();
- }
-});
-
-scene.addEventListener('loaded',()=>{
- say('Escena 3D lista. Pulsa iniciar para activar la cámara.');
-});
-
-scene.addEventListener('arReady',()=>{
- say('Cámara activa. Apunta al cuadro de Montevía.');
-});
-
-scene.addEventListener('arError',e=>{
- console.error('MindAR:',e);
- say('MindAR no pudo iniciar. Revisa targets.mind.txt y los permisos de cámara.');
-});
-
-target.addEventListener('targetFound',()=>targetChanged(true));
-target.addEventListener('targetLost',()=>targetChanged(false));
-
-startButton.addEventListener('click',async()=>{
- startButton.disabled=true;
- startButton.textContent='INICIANDO…';
- startError.textContent='';
- say('Comprobando archivo de reconocimiento…');
-
- try{
-  if(!window.isSecureContext){
-   throw new Error('La experiencia necesita abrirse mediante HTTPS.');
-  }
-
-  if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia){
-   throw new Error('Este navegador no permite acceder a la cámara. Abre el enlace en Chrome.');
-  }
-
-  const response=await fetch('./targets.mind.txt',{cache:'no-store'});
-
-  if(!response.ok){
-   throw new Error('No se encontró targets.mind.txt junto a index.html (respuesta '+response.status+').');
-  }
-
-  const data=await response.arrayBuffer();
-
-  if(data.byteLength<100){
-   throw new Error('targets.mind.txt parece vacío o incompleto. Sube el archivo .mind correcto.');
-  }
-
-  if(!window.AFRAME){
-   throw new Error('A-Frame no se pudo cargar. Comprueba la conexión a internet.');
-  }
-
-  if(!scene.hasLoaded){
-   await new Promise(resolve=>{
-    scene.addEventListener('loaded',resolve,{once:true});
-   });
-  }
-
-  arSystem=scene.systems['mindar-image-system'];
-
-  if(!arSystem){
-   throw new Error('No se encontró el sistema MindAR. Comprueba que la librería MindAR haya cargado.');
-  }
-
-  say('Activando cámara y reconocimiento…');
-  await arSystem.start();
-
-  start.style.display='none';
-  say('Cámara activa. Apunta al cuadro.');
-
- }catch(e){
-  console.error(e);
-  error(e.message||'No se pudo iniciar la experiencia.');
- }
-});
-
-window.addEventListener('beforeunload',()=>{
- if(recorder&&recorder.state==='recording')recorder.stop();
- if(recordStream)recordStream.getTracks().forEach(t=>t.stop());
-});
-
+(()=>{'use strict';
+const $=id=>document.getElementById(id),scene=$('scene'),target=document.querySelector('[mindar-image-target]'),start=$('start'),startButton=$('startButton'),startError=$('startError'),status=$('status'),photo=$('photo'),videoButton=$('video');
+let arSystem=null,found=false,recorder=null,recordStream=null,recordCanvas=null,recordCtx=null,recordRAF=0,chunks=[];
+function say(t){status.textContent=t;}
+function error(t){startError.textContent=t;say(t);startButton.disabled=false;startButton.textContent='INTENTAR DE NUEVO';}
+function targetChanged(value){found=value;document.body.classList.toggle('found',value);photo.disabled=!value;videoButton.disabled=!value||(!window.MediaRecorder);$('hint').textContent=value?'¡El bosque ha despertado!':'Vuelve a enfocar el cuadro';say(value?'¡Cuadro reconocido! Ya puedes tomar fotos o grabar.':'Buscando el cuadro…');}
+function cameraVideo(){return document.querySelector('video');}
+function fitDraw(ctx,source,w,h){const sw=source.videoWidth||source.width,sh=source.videoHeight||source.height;if(!sw||!sh)return;const scale=Math.max(w/sw,h/sh),cw=w/scale,ch=h/scale;ctx.drawImage(source,(sw-cw)/2,(sh-ch)/2,cw,ch,0,0,w,h);}
+function drawComposite(){const v=cameraVideo(),gl=scene.renderer&&scene.renderer.domElement;if(!v||v.readyState<2||!gl||!recordCtx)return;const w=recordCanvas.width,h=recordCanvas.height;recordCtx.clearRect(0,0,w,h);fitDraw(recordCtx,v,w,h);recordCtx.drawImage(gl,0,0,w,h);const g=recordCtx.createRadialGradient(w/2,h/2,h*.20,w/2,h/2,h*.78);g.addColorStop(0,'rgba(255,190,95,0)');g.addColorStop(1,'rgba(255,170,65,.17)');recordCtx.fillStyle=g;recordCtx.fillRect(0,0,w,h);}
+function setupComposite(){const v=cameraVideo(),gl=scene.renderer&&scene.renderer.domElement;if(!v||!gl||!v.videoWidth)throw new Error('La cámara todavía no entrega imagen. Espera unos segundos y vuelve a intentar.');const ratio=innerWidth/innerHeight;const max=1280;let w,h;if(ratio>=1){w=max;h=Math.round(max/ratio);}else{h=max;w=Math.round(max*ratio);}recordCanvas=document.createElement('canvas');recordCanvas.width=w;recordCanvas.height=h;recordCtx=recordCanvas.getContext('2d',{alpha:false});drawComposite();}
+function capturePhoto(){try{setupComposite();drawComposite();recordCanvas.toBlob(blob=>{if(!blob){say('No se pudo generar la fotografía.');return;}const url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='montevia-bosque-encantado.jpg';a.click();setTimeout(()=>URL.revokeObjectURL(url),30000);say('Fotografía guardada.');},'image/jpeg',.92);}catch(e){say(e.message);}}
+function stopRecording(){if(recorder&&recorder.state!=='inactive')recorder.stop();videoButton.textContent='● GRABAR VIDEO';videoButton.classList.remove('recording');}
+function startRecording(){try{if(!window.MediaRecorder||!HTMLCanvasElement.prototype.captureStream)throw new Error('Este navegador no admite grabación de video desde la experiencia. Prueba con Chrome actualizado.');setupComposite();const stream=recordCanvas.captureStream(24);recordStream=stream;const mimeTypes=['video/webm;codecs=vp9','video/webm;codecs=vp8','video/webm'];const mime=mimeTypes.find(m=>MediaRecorder.isTypeSupported(m));if(!mime)throw new Error('El navegador no ofrece un formato de grabación compatible.');chunks=[];recorder=new MediaRecorder(stream,{mimeType:mime,videoBitsPerSecond:3500000});recorder.ondataavailable=e=>{if(e.data&&e.data.size)chunks.push(e.data);};recorder.onerror=()=>say('El navegador informó un error durante la grabación.');recorder.onstop=()=>{cancelAnimationFrame(recordRAF);const blob=new Blob(chunks,{type:recorder.mimeType||'video/webm'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='montevia-bosque-encantado.webm';a.click();setTimeout(()=>URL.revokeObjectURL(url),60000);if(recordStream)recordStream.getTracks().forEach(t=>t.stop());recordStream=null;recorder=null;say('Video guardado en formato WebM.');};recorder.start(500);videoButton.textContent='■ DETENER VIDEO';videoButton.classList.add('recording');say('Grabando… pulsa DETENER VIDEO para guardar.');const draw=()=>{if(!recorder||recorder.state!=='recording')return;drawComposite();recordRAF=requestAnimationFrame(draw);};draw();}catch(e){say(e.message);}}
+photo.addEventListener('click',capturePhoto);videoButton.addEventListener('click',()=>{if(recorder&&recorder.state==='recording')stopRecording();else startRecording();});
+scene.addEventListener('loaded',()=>{say('Escena 3D lista. Pulsa iniciar para activar la cámara.');});
+scene.addEventListener('arReady',()=>say('Cámara activa. Apunta al cuadro de Montevía.'));
+scene.addEventListener('arError',e=>{console.error('MindAR:',e);say('MindAR no pudo iniciar. Revisa targets.mind.txt y los permisos de cámara.');});
+target.addEventListener('targetFound',()=>targetChanged(true));target.addEventListener('targetLost',()=>targetChanged(false));
+startButton.addEventListener('click',async()=>{startButton.disabled=true;startButton.textContent='INICIANDO…';startError.textContent='';say('Comprobando archivo de reconocimiento…');try{if(!window.isSecureContext)throw new Error('La experiencia necesita abrirse mediante HTTPS.');if(!navigator.mediaDevices||!navigator.mediaDevices.getUserMedia)throw new Error('Este navegador no permite acceder a la cámara. Abre el enlace en Chrome.');const response=await fetch('./targets.mind.txt',{cache:'no-store'});if(!response.ok)throw new Error('No se encontró targets.mind.txt junto a index.html (respuesta '+response.status+').');const data=await response.arrayBuffer();if(data.byteLength<100)throw new Error('targets.mind.txt parece vacío o incompleto. Sube el archivo .mind correcto.');if(!window.AFRAME)throw new Error('A-Frame no se pudo cargar. Comprueba la conexión a internet.');if(!scene.hasLoaded)await new Promise(resolve=>scene.addEventListener('loaded',resolve,{once:true}));arSystem=scene.systems['mindar-image-system'];if(!arSystem)throw new Error('No se encontró el sistema MindAR. Comprueba que la librería MindAR haya cargado.');say('Activando cámara y reconocimiento…');await arSystem.start();/* Refuerzo de capas: el video real de MindAR debe quedar delante del fondo y detrás del canvas transparente de A-Frame. */const cameraEl=document.querySelector('video');if(cameraEl){cameraEl.style.zIndex='0';cameraEl.style.background='transparent';cameraEl.setAttribute('playsinline','');cameraEl.setAttribute('autoplay','');cameraEl.muted=true;}start.style.display='none';say('Cámara activa. Apunta al cuadro.');}catch(e){console.error(e);error(e.message||'No se pudo iniciar la experiencia.');}});
+window.addEventListener('beforeunload',()=>{if(recorder&&recorder.state==='recording')recorder.stop();if(recordStream)recordStream.getTracks().forEach(t=>t.stop());});
 })();
 </script>
 </body>
